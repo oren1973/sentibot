@@ -1,48 +1,33 @@
-import os
 import requests
-import pandas as pd
-from nltk.sentiment.vader import SentimentIntensityAnalyzer
 import nltk
+from nltk.sentiment import SentimentIntensityAnalyzer
+from datetime import datetime
 
-nltk.download("vader_lexicon")
+nltk.download('vader_lexicon')
+sia = SentimentIntensityAnalyzer()
 
-FINNHUB_API_KEY = os.getenv("FINNHUB_API_KEY")
-if not FINNHUB_API_KEY:
-    raise ValueError("Missing FINNHUB_API_KEY environment variable.")
+NEWS_API_KEY = "49e6a262cba74b419c2dbea7c3376eb9"
 
-# רשימת מניות לדוגמה (בשלב הבא נחליף ב-S&P 500 אמיתי)
-tickers = ["TSLA", "NVDA", "AAPL", "MSFT", "GME", "META", "AMZN"]
-
-analyzer = SentimentIntensityAnalyzer()
-
-def get_news_sentiment(symbol):
-    url = f"https://finnhub.io/api/v1/company-news?symbol={symbol}&from=2024-04-25&to=2024-05-01&token={FINNHUB_API_KEY}"
+def fetch_headlines():
+    url = (
+        f"https://newsapi.org/v2/top-headlines?"
+        f"category=business&language=en&pageSize=10&apiKey={NEWS_API_KEY}"
+    )
     response = requests.get(url)
     if response.status_code != 200:
-        return None
+        return [("שגיאה בקבלת חדשות", 0.0)]
 
-    news_items = response.json()
-    scores = []
-    for item in news_items:
-        headline = item.get("headline", "")
-        score = analyzer.polarity_scores(headline)["compound"]
-        scores.append(score)
+    articles = response.json().get("articles", [])
+    return [
+        (a["title"], sia.polarity_scores(a["title"])['compound'])
+        for a in articles if "title" in a
+    ]
 
-    if scores:
-        return sum(scores) / len(scores)
-    return 0
-
-results = []
-for symbol in tickers:
-    sentiment = get_news_sentiment(symbol)
-    if sentiment is not None:
-        results.append({"symbol": symbol, "sentiment": sentiment})
-
-df = pd.DataFrame(results)
-df_sorted = df.sort_values(by="sentiment", ascending=False)
-
-print("Top 5 Positive Sentiment Stocks:")
-print(df_sorted.head(5))
-
-print("\nTop 5 Negative Sentiment Stocks:")
-print(df_sorted.tail(5)
+def build_report():
+    headlines = fetch_headlines()
+    now = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+    report = f"🕒 Sentiment Report: {now}\n\n"
+    for title, score in headlines:
+        sentiment = "🟢" if score > 0.2 else "🔴" if score < -0.2 else "🟡"
+        report += f"{sentiment} {title} (Score: {score:.2f})\n"
+    return report
