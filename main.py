@@ -24,4 +24,6 @@ def send_status_email():
         server.sendmail(sender_email, receiver_email, msg.as_string())
 
 if __name__ == "__main__":
-    send_status_email()
+    while True:
+        send_status_email()
+        time.sleep(3600)
