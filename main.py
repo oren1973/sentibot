@@ -3,8 +3,8 @@ from email.mime.text import MIMEText
 from datetime import datetime
 
 def send_status_email():
-    sender_email = "your_email@gmail.com"
-    app_password = "your_app_password"
+    sender_email = "oren.waldman@gmail.com"
+    app_password = "vpeifrchjagwvxci"
     receiver_email = "oren.waldman@gmail.com"
 
     body = f"""Sentibot - דוח שעתית
