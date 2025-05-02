@@ -1,33 +1,43 @@
 import requests
 import nltk
 from nltk.sentiment import SentimentIntensityAnalyzer
-from datetime import datetime
 
 nltk.download('vader_lexicon')
-sia = SentimentIntensityAnalyzer()
 
-NEWS_API_KEY = "49e6a262cba74b419c2dbea7c3376eb9"
-
-def fetch_headlines():
-    url = (
-        f"https://newsapi.org/v2/top-headlines?"
-        f"category=business&language=en&pageSize=10&apiKey={NEWS_API_KEY}"
-    )
-    response = requests.get(url)
-    if response.status_code != 200:
-        return [("שגיאה בקבלת חדשות", 0.0)]
-
-    articles = response.json().get("articles", [])
-    return [
-        (a["title"], sia.polarity_scores(a["title"])['compound'])
-        for a in articles if "title" in a
+def fetch_news():
+    # דוגמה של מקורות — ניתן לשדרג
+    urls = [
+        "https://www.cnbc.com/id/100003114/device/rss/rss.html",
+        "https://www.marketwatch.com/rss/topstories",
     ]
+    headlines = []
+    for url in urls:
+        try:
+            r = requests.get(url)
+            for line in r.text.splitlines():
+                if "<title>" in line:
+                    title = line.strip().replace("<title>", "").replace("</title>", "")
+                    if title and "CDATA" not in title:
+                        headlines.append(title)
+        except Exception as e:
+            print(f"Error fetching from {url}: {e}")
+    return headlines
 
-def build_report():
-    headlines = fetch_headlines()
-    now = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-    report = f"🕒 Sentiment Report: {now}\n\n"
-    for title, score in headlines:
-        sentiment = "🟢" if score > 0.2 else "🔴" if score < -0.2 else "🟡"
-        report += f"{sentiment} {title} (Score: {score:.2f})\n"
-    return report
+def analyze_sentiment(headlines):
+    sia = SentimentIntensityAnalyzer()
+    results = []
+    for headline in headlines:
+        score = sia.polarity_scores(headline)["compound"]
+        results.append((headline, score))
+    return results
+
+def generate_report():
+    headlines = fetch_news()
+    analyzed = analyze_sentiment(headlines)
+    if not analyzed:
+        return "לא נמצאו כותרות לניתוח."
+    report_lines = ["📊 דוח סנטימנט:"]
+    for headline, score in analyzed[:10]:
+        emoji = "🟢" if score > 0.2 else "🔴" if score < -0.2 else "🟡"
+        report_lines.append(f"{emoji} {headline} (Score: {round(score, 2)})")
+    return "\n".join(report_lines)
