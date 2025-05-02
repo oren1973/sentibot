@@ -1,21 +1,21 @@
 import smtplib
 from email.mime.text import MIMEText
 from datetime import datetime
-from scanner import build_report  # ייבוא מהסורק
+from scanner import generate_report
 
 def send_status_email():
     sender_email = "oren.waldman@gmail.com"
-    app_password = "vpeifrchjagwvxci"  # ודא שזהו הסיסמה מה-App Passwords
+    app_password = "vpeifrchjagwvxci"  # הסיסמה שנוצרה מה־App Passwords בגוגל
     receiver_email = "oren.waldman@gmail.com"
 
-    body = f"""Sentibot - דוח שעתית
-🕒 זמן שליחה: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
+    body = f"""Sentibot - דוח רגשי
+🕒 נשלח בתאריך: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
 
-{build_report()}
+{generate_report()}
 """
 
     msg = MIMEText(body)
-    msg["Subject"] = "Sentibot | דוח רגשי מהשוק"
+    msg["Subject"] = "Sentibot | דוח רגשי מהחדשות"
     msg["From"] = sender_email
     msg["To"] = receiver_email
 
