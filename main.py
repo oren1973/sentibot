@@ -3,10 +3,11 @@ from email.mime.text import MIMEText
 from datetime import datetime
 from scanner import generate_report
 
-def send_status_email():
-    sender_email = "oren.waldman@gmail.com"
-    app_password = "vpeifrchjagwvxci"  # הסיסמה שנוצרה מה־App Passwords בגוגל
-    receiver_email = "oren.waldman@gmail.com"
+import os
+
+sender_email = os.getenv("SENDER_EMAIL")
+app_password = os.getenv("APP_PASSWORD")
+receiver_email = os.getenv("RECEIVER_EMAIL")
 
     body = f"""Sentibot - דוח רגשי
 🕒 נשלח בתאריך: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
