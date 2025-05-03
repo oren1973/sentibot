@@ -1,33 +1,24 @@
-# main.py
-# Sentibot: Autonomous Emotional Trading Bot (Simulation Mode)
-# Version: Stable MVP | Reviewed and Peer-Checked
-
-import requests
-from scanner import scan_news
-from emailer import send_status_email
-from time import sleep
+from scanner import scan_market_and_generate_report
+import smtplib
+from email.mime.text import MIMEText
 from datetime import datetime
+import os
 
-INTERVAL_MINUTES = 60  # Email interval in minutes
+def send_status_email(body):
+    sender_email = os.getenv("SENDER_EMAIL")
+    app_password = os.getenv("APP_PASSWORD")
+    receiver_email = os.getenv("RECEIVER_EMAIL")
 
+    msg = MIMEText(body)
+    msg["Subject"] = "Sentibot | דוח אוטומטי"
+    msg["From"] = sender_email
+    msg["To"] = receiver_email
 
-def main():
-    print("[INFO] Sentibot started at:", datetime.now().strftime('%Y-%m-%d %H:%M:%S'))
-    while True:
-        try:
-            print("[INFO] Scanning news...")
-            scan_news()
-
-            print("[INFO] Sending status email...")
-            send_status_email()
-
-            print(f"[INFO] Sleeping for {INTERVAL_MINUTES} minutes...\n")
-            sleep(INTERVAL_MINUTES * 60)
-
-        except Exception as e:
-            print("[ERROR] Unexpected error occurred:", e)
-            sleep(300)  # Wait 5 minutes before retrying
-
+    with smtplib.SMTP_SSL("smtp.gmail.com", 465) as server:
+        server.login(sender_email, app_password)
+        server.sendmail(sender_email, receiver_email, msg.as_string())
 
 if __name__ == "__main__":
-    main()
+    report = scan_market_and_generate_report()
+    if report:  # נשלח מייל רק אם יש תוכן
+        send_status_email(report)
