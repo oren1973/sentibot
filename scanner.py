@@ -2,20 +2,30 @@ import requests
 from bs4 import BeautifulSoup
 
 def scan_market_and_generate_report():
-    url = "https://www.bizportal.co.il"
-    response = requests.get(url)
-    if response.status_code != 200:
-        print("DEBUG | Failed to fetch site. Status:", response.status_code)
-        return None
+    url = "https://www.bizportal.co.il/"
+    headers = {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"
+    }
 
-    soup = BeautifulSoup(response.text, 'html.parser')
-    headlines = soup.find_all("h3")
+    try:
+        response = requests.get(url, headers=headers)
+        response.raise_for_status()
+    except Exception as e:
+        print(f"⚠️ שגיאה בגישה לאתר: {e}")
+        return ""
 
-    print("DEBUG | headlines found:", len(headlines))
-    print("DEBUG | full HTML:", soup.prettify()[:1000])  # הדפסת התחלה לבדיקה
+    soup = BeautifulSoup(response.text, "html.parser")
+    headlines = soup.find_all("h2")  # ניתן לשנות לפי מבנה האתר
 
     if not headlines:
-        return None
+        print("DEBUG | headlines found: 0")
+        print("DEBUG | full HTML:", response.text[:1000])  # הדפסת תחילת HTML
+        return ""
 
-    report = "\n".join(h.get_text(strip=True) for h in headlines if h.get_text(strip=True))
-    return report if report.strip() else None
+    report_lines = ["🔎 חדשות שוק ההון - כותרות מביזפורטל:\n"]
+    for h in headlines[:5]:
+        text = h.get_text(strip=True)
+        if text:
+            report_lines.append(f"• {text}")
+
+    return "\n".join(report_lines)
