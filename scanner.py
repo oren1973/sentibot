@@ -1,43 +1,31 @@
 import requests
+from bs4 import BeautifulSoup
+from nltk.sentiment.vader import SentimentIntensityAnalyzer
 import nltk
-from nltk.sentiment import SentimentIntensityAnalyzer
 
-nltk.download('vader_lexicon')
+# ודא שהמודול נשלף רק פעם אחת אם אתה מפעיל כרון כל שעה
+nltk.download('vader_lexicon', quiet=True)
 
-def fetch_news():
-    # דוגמה של מקורות — ניתן לשדרג
-    urls = [
-        "https://www.cnbc.com/id/100003114/device/rss/rss.html",
-        "https://www.marketwatch.com/rss/topstories",
-    ]
-    headlines = []
-    for url in urls:
-        try:
-            r = requests.get(url)
-            for line in r.text.splitlines():
-                if "<title>" in line:
-                    title = line.strip().replace("<title>", "").replace("</title>", "")
-                    if title and "CDATA" not in title:
-                        headlines.append(title)
-        except Exception as e:
-            print(f"Error fetching from {url}: {e}")
-    return headlines
+def scan_news():
+    url = "https://www.bbc.com/news"
+    response = requests.get(url)
 
-def analyze_sentiment(headlines):
-    sia = SentimentIntensityAnalyzer()
+    if response.status_code != 200:
+        raise Exception(f"Failed to fetch BBC News: status code {response.status_code}")
+
+    soup = BeautifulSoup(response.text, 'html.parser')
+    headlines = [h.get_text().strip() for h in soup.find_all(['h3', 'h2']) if h.get_text().strip()]
+    if not headlines:
+        raise Exception("No headlines found on BBC News page.")
+
+    analyzer = SentimentIntensityAnalyzer()
     results = []
-    for headline in headlines:
-        score = sia.polarity_scores(headline)["compound"]
-        results.append((headline, score))
-    return results
 
-def generate_report():
-    headlines = fetch_news()
-    analyzed = analyze_sentiment(headlines)
-    if not analyzed:
-        return "לא נמצאו כותרות לניתוח."
-    report_lines = ["📊 דוח סנטימנט:"]
-    for headline, score in analyzed[:10]:
-        emoji = "🟢" if score > 0.2 else "🔴" if score < -0.2 else "🟡"
-        report_lines.append(f"{emoji} {headline} (Score: {round(score, 2)})")
-    return "\n".join(report_lines)
+    for headline in headlines:
+        sentiment = analyzer.polarity_scores(headline)
+        results.append({
+            'headline': headline,
+            'sentiment': sentiment
+        })
+
+    return results
