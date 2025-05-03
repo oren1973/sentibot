@@ -13,7 +13,7 @@ def send_email(subject, body):
     print("DEBUG | RECEIVER_EMAIL:", receiver_email)
 
     if not all([sender_email, app_password, receiver_email]):
-        print("⚠️ One or more email environment variables are missing.")
+        print("⚠️ שגיאה - אחד או יותר ממשתני הסביבה לא הוגדרו")
         return
 
     msg = MIMEText(body)
@@ -25,13 +25,12 @@ def send_email(subject, body):
         with smtplib.SMTP_SSL("smtp.gmail.com", 465) as server:
             server.login(sender_email, app_password)
             server.sendmail(sender_email, receiver_email, msg.as_string())
-            print("✅ Email sent successfully.")
     except Exception as e:
-        print("❌ Failed to send email:", e)
+        print(f"⚠️ שגיאה בשליחת המייל: {e}")
 
 if __name__ == "__main__":
-    body = scan_market_and_generate_report()
-    if body:
-        send_email("Sentibot | דוח אוטומטי", body)
+    report = scan_market_and_generate_report()
+    if report:
+        send_email("Sentibot | דוח אוטומטי", report)
     else:
         print("⚠️ לא נשלח מייל – הדוח ריק או שגוי.")
