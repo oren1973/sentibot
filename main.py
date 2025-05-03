@@ -6,16 +6,17 @@ from scanner import scan_market_and_generate_report
 
 print("✅ Sentibot starting...")
 
-# שלב 1: סריקה וניתוח סנטימנט
+# סריקה וניתוח סנטימנט
 headlines = scan_market_and_generate_report()
 print(f"DEBUG | headlines found: {len(headlines)}")
 
+# ניתוח כל הכותרות בבת אחת
 sentiment_data = analyze_sentiment(headlines)
 
-# שלב 2: עיצוב הדוח
+# עיצוב הפלט
 formatted = format_headlines(sentiment_data)
 
-# שלב 3: שליחת מייל (אם יש משתנים מוגדרים)
+# משתני סביבה
 sender_email = os.environ.get("EMAIL_USER")
 app_password = os.environ.get("EMAIL_PASS")
 receiver_email = os.environ.get("EMAIL_RECEIVER")
