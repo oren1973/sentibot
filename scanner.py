@@ -1,31 +1,20 @@
 import requests
 from bs4 import BeautifulSoup
-from nltk.sentiment.vader import SentimentIntensityAnalyzer
-import nltk
+from datetime import datetime
 
-# ודא שהמודול נשלף רק פעם אחת אם אתה מפעיל כרון כל שעה
-nltk.download('vader_lexicon', quiet=True)
+def scan_market_and_generate_report():
+    url = "https://www.bizportal.co.il/"
+    try:
+        response = requests.get(url)
+        soup = BeautifulSoup(response.text, "html.parser")
+        headlines = soup.find_all("h3")
 
-def scan_news():
-    url = "https://www.bbc.com/news"
-    response = requests.get(url)
+        if not headlines:
+            return None
 
-    if response.status_code != 200:
-        raise Exception(f"Failed to fetch BBC News: status code {response.status_code}")
-
-    soup = BeautifulSoup(response.text, 'html.parser')
-    headlines = [h.get_text().strip() for h in soup.find_all(['h3', 'h2']) if h.get_text().strip()]
-    if not headlines:
-        raise Exception("No headlines found on BBC News page.")
-
-    analyzer = SentimentIntensityAnalyzer()
-    results = []
-
-    for headline in headlines:
-        sentiment = analyzer.polarity_scores(headline)
-        results.append({
-            'headline': headline,
-            'sentiment': sentiment
-        })
-
-    return results
+        selected = [h.get_text(strip=True) for h in headlines[:5]]
+        date = datetime.now().strftime("%Y-%m-%d %H:%M")
+        report = f"דוח רגשות שוק ({date}):\n" + "\n".join(f"- {line}" for line in selected)
+        return report
+    except Exception as e:
+        return f"שגיאה במהלך סריקת האתר: {e}"
