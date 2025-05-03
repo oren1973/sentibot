@@ -6,18 +6,16 @@ from scanner import scan_market_and_generate_report
 
 print("✅ Sentibot starting...")
 
-# סריקה וניתוח סנטימנט
+# שלב 1: סריקה וניתוח סנטימנט
 headlines = scan_market_and_generate_report()
 print(f"DEBUG | headlines found: {len(headlines)}")
 
-sentiment_data = []
-for headline in headlines:
-    sentiment = analyze_sentiment(headline)
-    sentiment_data.append({'title': headline, 'sentiment': sentiment})
+sentiment_data = analyze_sentiment(headlines)
 
+# שלב 2: עיצוב הדוח
 formatted = format_headlines(sentiment_data)
 
-# בדיקת משתני סביבה
+# שלב 3: שליחת מייל (אם יש משתנים מוגדרים)
 sender_email = os.environ.get("EMAIL_USER")
 app_password = os.environ.get("EMAIL_PASS")
 receiver_email = os.environ.get("EMAIL_RECEIVER")
@@ -25,7 +23,6 @@ receiver_email = os.environ.get("EMAIL_RECEIVER")
 if not all([sender_email, app_password, receiver_email]):
     print("❌ Missing email environment variables.")
 else:
-    # שליחת מייל
     body = f"""חדשות מהשוק:
 
 {formatted}
