@@ -1,3 +1,4 @@
+# 📄 requirements.txt
 requests
-nltk
 beautifulsoup4
+nltk
