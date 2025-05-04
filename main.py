@@ -1,50 +1,47 @@
-# main.py
-
-import os
-import smtplib
-from email.mime.text import MIMEText
+# 📄 main.py
+from scanner import scan_market_headlines
 from utils import analyze_sentiment, format_headlines
-from scanner import scan_market_and_generate_report
+from trader import execute_trades
+import os
 
 print("✅ Sentibot starting...")
 
-# סריקה וניתוח סנטימנט
-headlines = scan_market_and_generate_report()
+# 1. סריקה
+headlines = scan_market_headlines()
 print(f"DEBUG | headlines found: {len(headlines)}")
-print("DEBUG | first headlines:", headlines[:10])  # לאבחון
 
-sentiment_data = []
-for headline in headlines:
-    sentiment_score = analyze_sentiment([headline])  # העבר רשימה
-    sentiment_data.append({'headline': headline, 'sentiment': sentiment_score[0]["sentiment"] if sentiment_score else 0.0})
+# 2. ניתוח סנטימנט
+sentiment_data = analyze_sentiment(headlines)
 
+# 3. עיצוב הדוח
 formatted = format_headlines(sentiment_data)
 
-# בדיקת משתני סביבה
+# 4. מסחר (שלב MVP: הדמיה בלבד)
+execute_trades(sentiment_data)
+
+# 5. שליחת אימייל (אם נדרש)
 sender_email = os.environ.get("EMAIL_USER")
 app_password = os.environ.get("EMAIL_PASS")
 receiver_email = os.environ.get("EMAIL_RECEIVER")
 
-if not all([sender_email, app_password, receiver_email]):
-    print("❌ Missing email environment variables.")
-else:
-    # שליחת מייל רק אם יש כותרות
-    if not sentiment_data:
-        print("⚠️ לא נשלח מייל – אין כותרות.")
-    else:
-        body = f"""חדשות מהשוק:
+if sender_email and app_password and receiver_email:
+    from email.mime.text import MIMEText
+    import smtplib
+
+    msg = MIMEText(f"""דו"ח יומי של Sentibot:
 
 {formatted}
-"""
-        msg = MIMEText(body)
-        msg["Subject"] = "Sentibot | דוח אוטומטי"
-        msg["From"] = sender_email
-        msg["To"] = receiver_email
+""")
+    msg["Subject"] = "Sentibot | דוח מסחר יומי"
+    msg["From"] = sender_email
+    msg["To"] = receiver_email
 
-        try:
-            with smtplib.SMTP_SSL("smtp.gmail.com", 465) as server:
-                server.login(sender_email, app_password)
-                server.sendmail(sender_email, receiver_email, msg.as_string())
-            print("✅ נשלח מייל בהצלחה.")
-        except Exception as e:
-            print("❌ שליחת מייל נכשלה:", e)
+    try:
+        with smtplib.SMTP_SSL("smtp.gmail.com", 465) as server:
+            server.login(sender_email, app_password)
+            server.sendmail(sender_email, receiver_email, msg.as_string())
+        print("✅ נשלח מייל בהצלחה.")
+    except Exception as e:
+        print("❌ שליחת מייל נכשלה:", e)
+else:
+    print("⚠️ לא נשלח מייל – חסר מידע התחברות או כתובת יעד.")
