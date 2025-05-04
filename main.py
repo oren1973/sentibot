@@ -1,52 +1,37 @@
 import os
-from utils import analyze_sentiment, format_headlines
-from scanner import scan_market_headlines
-from alpaca_client import buy_stock
-import smtplib
-from email.mime.text import MIMEText
+import requests
 
-print("✅ Sentibot starting...")
+# שליפת מפתחות מהסביבה
+API_KEY = os.getenv("ALPACA_API_KEY")
+SECRET_KEY = os.getenv("ALPACA_SECRET_KEY")
+BASE_URL = os.getenv("ALPACA_PAPER_BASE_URL", "https://paper-api.alpaca.markets")
 
-# סריקה וניתוח
-headlines = scan_market_headlines()
-print(f"DEBUG | headlines found: {len(headlines)}")
+headers = {
+    "APCA-API-KEY-ID": API_KEY,
+    "APCA-API-SECRET-KEY": SECRET_KEY
+}
 
-sentiment_data = analyze_sentiment(headlines)
-formatted = format_headlines(sentiment_data)
+print("📡 בודק חיבור ל-Alpaca...")
 
-# החלטות קנייה פשוטות (מעל 0.3)
-for item in sentiment_data:
-    score = item["sentiment"]
-    text = item["headline"]
-    if score > 0.3:
-        if "meta" in text.lower():
-            buy_stock("META")
-        elif "tesla" in text.lower():
-            buy_stock("TSLA")
-        elif "nvidia" in text.lower():
-            buy_stock("NVDA")
-
-# שליחת מייל
-sender_email = os.environ.get("EMAIL_USER")
-app_password = os.environ.get("EMAIL_PASS")
-receiver_email = os.environ.get("EMAIL_RECEIVER")
-
-if sender_email and app_password and receiver_email:
-    msg = MIMEText(f"""דוח יומי Sentibot:
-
-📊 ניתוח סנטימנט יומי:
-{formatted}
-""")
-    msg["Subject"] = "Sentibot | דוח מסחר יומי"
-    msg["From"] = sender_email
-    msg["To"] = receiver_email
-
-    try:
-        with smtplib.SMTP_SSL("smtp.gmail.com", 465) as server:
-            server.login(sender_email, app_password)
-            server.sendmail(sender_email, receiver_email, msg.as_string())
-        print("✅ נשלח מייל בהצלחה.")
-    except Exception as e:
-        print("❌ שליחת מייל נכשלה:", e)
+# בדיקת חיבור לחשבון
+r = requests.get(f"{BASE_URL}/v2/account", headers=headers)
+if r.status_code == 200:
+    print("✅ חיבור ל-Alpaca הצליח!")
 else:
-    print("⚠️ חסרים פרטי התחברות למייל.")
+    print(f"❌ חיבור נכשל: {r.status_code} {r.text}")
+    exit()
+
+# בדיקת זמינות של מניית META
+symbol = "META"
+print(f"\n🔍 בודק אם {symbol} קיימת וניתנת למסחר...")
+
+r = requests.get(f"{BASE_URL}/v2/assets/{symbol}", headers=headers)
+if r.status_code == 200:
+    data = r.json()
+    tradable = data.get("tradable", False)
+    easy_to_borrow = data.get("easy_to_borrow", False)
+    print(f"📈 {symbol} קיימת במערכת!")
+    print(f"🛒 ניתן לסחור בה? {'✅ כן' if tradable else '❌ לא'}")
+    print(f"💵 ניתן לשאול אותה? {'✅ כן' if easy_to_borrow else '❌ לא'}")
+else:
+    print(f"❌ לא ניתן לבדוק את {symbol}: {r.status_code} {r.text}")
