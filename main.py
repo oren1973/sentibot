@@ -1,35 +1,40 @@
-# 📄 main.py
-from scanner import scan_market_headlines
-from utils import analyze_sentiment, format_headlines
-from trader import execute_trades
 import os
+from utils import analyze_sentiment, format_headlines
+from scanner import scan_market_headlines
+from alpaca_client import buy_stock
+import smtplib
+from email.mime.text import MIMEText
 
 print("✅ Sentibot starting...")
 
-# 1. סריקה
+# סריקה וניתוח
 headlines = scan_market_headlines()
 print(f"DEBUG | headlines found: {len(headlines)}")
 
-# 2. ניתוח סנטימנט
 sentiment_data = analyze_sentiment(headlines)
-
-# 3. עיצוב הדוח
 formatted = format_headlines(sentiment_data)
 
-# 4. מסחר (שלב MVP: הדמיה בלבד)
-execute_trades(sentiment_data)
+# החלטות קנייה פשוטות (מעל 0.3)
+for item in sentiment_data:
+    score = item["sentiment"]
+    text = item["headline"]
+    if score > 0.3:
+        if "meta" in text.lower():
+            buy_stock("META")
+        elif "tesla" in text.lower():
+            buy_stock("TSLA")
+        elif "nvidia" in text.lower():
+            buy_stock("NVDA")
 
-# 5. שליחת אימייל (אם נדרש)
+# שליחת מייל
 sender_email = os.environ.get("EMAIL_USER")
 app_password = os.environ.get("EMAIL_PASS")
 receiver_email = os.environ.get("EMAIL_RECEIVER")
 
 if sender_email and app_password and receiver_email:
-    from email.mime.text import MIMEText
-    import smtplib
+    msg = MIMEText(f"""דוח יומי Sentibot:
 
-    msg = MIMEText(f"""דו"ח יומי של Sentibot:
-
+📊 ניתוח סנטימנט יומי:
 {formatted}
 """)
     msg["Subject"] = "Sentibot | דוח מסחר יומי"
@@ -44,4 +49,4 @@ if sender_email and app_password and receiver_email:
     except Exception as e:
         print("❌ שליחת מייל נכשלה:", e)
 else:
-    print("⚠️ לא נשלח מייל – חסר מידע התחברות או כתובת יעד.")
+    print("⚠️ חסרים פרטי התחברות למייל.")
