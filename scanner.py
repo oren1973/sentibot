@@ -1,35 +1,25 @@
-# scanner.py
-
+# 📄 scanner.py
 import requests
 from bs4 import BeautifulSoup
 
-def scan_market_and_generate_report():
-    url = "https://finance.yahoo.com/"
-    headers = {
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"
-    }
-
-    try:
-        response = requests.get(url, headers=headers)
-        response.raise_for_status()
-    except Exception as e:
-        print("⚠️ שגיאה בגישה לאתר Yahoo Finance:", e)
-        return []
-
-    soup = BeautifulSoup(response.text, "html.parser")
+def scan_market_headlines():
+    urls = [
+        "https://www.marketwatch.com/latest-news",
+        "https://www.investors.com/news/",
+        "https://www.bloomberg.com/markets"
+    ]
 
     headlines = []
 
-    # מחפש כותרות מהאלמנטים המרכזיים באתר
-    for tag in soup.find_all("a"):
-        text = tag.get_text(strip=True)
-        if text and 20 < len(text) < 150:
-            headlines.append(text)
-
-    if not headlines:
-        print("⚠️ לא נמצאו כותרות – ודא ששינית את האתר הנסרק.")
-    else:
-        print(f"DEBUG | headlines found: {len(headlines)}")
-        print("DEBUG | first headlines:", headlines[:3])
+    for url in urls:
+        try:
+            res = requests.get(url, timeout=10)
+            soup = BeautifulSoup(res.text, "html.parser")
+            for tag in soup.find_all(["h3", "h2", "a"]):
+                text = tag.get_text(strip=True)
+                if text and 10 < len(text) < 200:
+                    headlines.append(text)
+        except Exception as e:
+            print(f"⚠️ Failed to fetch from {url}:", e)
 
     return headlines
