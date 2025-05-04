@@ -1,9 +1,14 @@
-# 📄 trader.py
+# trader.py
 from config import TRADE_THRESHOLD, WHITELISTED_SYMBOLS
 
 def execute_trades(sentiment_data):
     print("🔍 סימולציית מסחר:")
     for item in sentiment_data:
+        # נוודא שזה מילון
+        if not isinstance(item, dict):
+            print(f"⚠️ דילוג על פריט לא חוקי: {item}")
+            continue
+
         text = item.get("headline", "")
         score = float(item.get("sentiment", 0.0))
 
