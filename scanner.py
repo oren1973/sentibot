@@ -1,25 +1,17 @@
-# 📄 scanner.py
-import requests
-from bs4 import BeautifulSoup
+import feedparser
 
-def scan_market_headlines():
-    urls = [
-        "https://www.marketwatch.com/latest-news",
-        "https://www.investors.com/news/",
-        "https://www.bloomberg.com/markets"
-    ]
+def scan_market_and_generate_report():
+    rss_url = "https://www.marketwatch.com/rss/topstories"  # פיד RSS עדכני ואמין
+    feed = feedparser.parse(rss_url)
+
+    if not feed.entries:
+        print("⚠️ לא נמצאו כותרות בפיד MarketWatch.")
+        return []
 
     headlines = []
-
-    for url in urls:
-        try:
-            res = requests.get(url, timeout=10)
-            soup = BeautifulSoup(res.text, "html.parser")
-            for tag in soup.find_all(["h3", "h2", "a"]):
-                text = tag.get_text(strip=True)
-                if text and 10 < len(text) < 200:
-                    headlines.append(text)
-        except Exception as e:
-            print(f"⚠️ Failed to fetch from {url}:", e)
+    for entry in feed.entries:
+        title = entry.get("title", "").strip()
+        if title:
+            headlines.append(title)
 
     return headlines
