@@ -1,39 +1,50 @@
-from alpaca_test import *
-
 import os
-import requests
+import time
+import smtplib
+from email.mime.text import MIMEText
+from email.mime.multipart import MIMEMultipart
+import nltk
+from scanner import scan_market_headlines
+from trader import execute_trade
+from utils import analyze_sentiment, log_message
 
-# שליפת מפתחות מהסביבה
-API_KEY = os.getenv("ALPACA_API_KEY")
-SECRET_KEY = os.getenv("ALPACA_SECRET_KEY")
-BASE_URL = os.getenv("ALPACA_PAPER_BASE_URL", "https://paper-api.alpaca.markets")
+nltk.download('vader_lexicon')
 
-headers = {
-    "APCA-API-KEY-ID": API_KEY,
-    "APCA-API-SECRET-KEY": SECRET_KEY
-}
+def send_email(subject, body):
+    msg = MIMEMultipart()
+    msg['From'] = os.environ['EMAIL_USER']
+    msg['To'] = os.environ['EMAIL_RECEIVER']
+    msg['Subject'] = subject
+    msg.attach(MIMEText(body, 'plain'))
 
-print("📡 בודק חיבור ל-Alpaca...")
+    with smtplib.SMTP_SSL('smtp.gmail.com', 465) as server:
+        server.login(os.environ['EMAIL_USER'], os.environ['EMAIL_PASS'])
+        server.sendmail(msg['From'], msg['To'], msg.as_string())
 
-# בדיקת חיבור לחשבון
-r = requests.get(f"{BASE_URL}/v2/account", headers=headers)
-if r.status_code == 200:
-    print("✅ חיבור ל-Alpaca הצליח!")
-else:
-    print(f"❌ חיבור נכשל: {r.status_code} {r.text}")
-    exit()
+def main():
+    log_message("Sentibot starting...")
+    headlines = scan_market_headlines()
+    log_message(f"DEBUG | headlines found: {len(headlines)}")
 
-# בדיקת זמינות של מניית META
-symbol = "META"
-print(f"\n🔍 בודק אם {symbol} קיימת וניתנת למסחר...")
+    summary_lines = []
+    for symbol, articles in headlines.items():
+        scores = [analyze_sentiment(text) for text in articles]
+        if not scores:
+            continue
+        avg_score = round(sum(scores) / len(scores), 2)
+        if avg_score >= 0.5:
+            result = f"🟢 קנייה אוטומטית: {symbol} | ציון סנטימנט: {avg_score}"
+            success = execute_trade(symbol, qty=1)
+            if not success:
+                result += " ❌ שגיאה בביצוע קנייה"
+        else:
+            result = f"🔵 ניטרלי: {symbol} | ציון סנטימנט: {avg_score}"
+        log_message(result)
+        summary_lines.append(f"→ ({avg_score}) {symbol}")
 
-r = requests.get(f"{BASE_URL}/v2/assets/{symbol}", headers=headers)
-if r.status_code == 200:
-    data = r.json()
-    tradable = data.get("tradable", False)
-    easy_to_borrow = data.get("easy_to_borrow", False)
-    print(f"📈 {symbol} קיימת במערכת!")
-    print(f"🛒 ניתן לסחור בה? {'✅ כן' if tradable else '❌ לא'}")
-    print(f"💵 ניתן לשאול אותה? {'✅ כן' if easy_to_borrow else '❌ לא'}")
-else:
-    print(f"❌ לא ניתן לבדוק את {symbol}: {r.status_code} {r.text}")
+    body = "📊 ניתוח סנטימנט יומי:\n\n" + "\n".join(summary_lines)
+    send_email("דוח מסחר יומי | Sentibot", body)
+    log_message("✅ שלח מייל בהצלחה.")
+
+if __name__ == "__main__":
+    main()
