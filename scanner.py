@@ -1,17 +1,17 @@
 import feedparser
 
-def scan_market_and_generate_report():
-    rss_url = "https://www.marketwatch.com/rss/topstories"  # פיד RSS עדכני ואמין
-    feed = feedparser.parse(rss_url)
+RSS_FEEDS = [
+    "https://feeds.finance.yahoo.com/rss/2.0/headline?s=AAPL,MSFT,GOOGL,AMZN,TSLA,META,NVDA,BRK-B,JPM,JNJ&region=US&lang=en-US"
+]
 
-    if not feed.entries:
-        print("⚠️ לא נמצאו כותרות בפיד MarketWatch.")
-        return []
-
+def scan_market_headlines():
     headlines = []
-    for entry in feed.entries:
-        title = entry.get("title", "").strip()
-        if title:
-            headlines.append(title)
-
+    for feed_url in RSS_FEEDS:
+        try:
+            feed = feedparser.parse(feed_url)
+            for entry in feed.entries:
+                if 'title' in entry:
+                    headlines.append(entry.title)
+        except Exception as e:
+            print(f"⚠️ שגיאה בעת עיבוד הפיד: {e}")
     return headlines
