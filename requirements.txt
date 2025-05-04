@@ -1,4 +1,4 @@
-# 📄 requirements.txt
 requests
 beautifulsoup4
 nltk
+feedparser
