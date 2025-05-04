@@ -2,3 +2,4 @@ requests
 beautifulsoup4
 nltk
 feedparser
+alpaca-trade-api
