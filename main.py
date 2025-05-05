@@ -1,7 +1,8 @@
 import os
+import csv
 import requests
 from dotenv import load_dotenv
-from sentiment import get_sentiment_score  # מניח שקיים
+from sentiment import get_sentiment_score
 
 load_dotenv()
 
@@ -14,27 +15,16 @@ HEADERS = {
     "APCA-API-SECRET-KEY": SECRET_KEY
 }
 
-# === PARAMETERS ===
-symbol = "AAPL"
-qty = 1
+def read_tickers(file_path="tickers.csv"):
+    with open(file_path, newline='') as f:
+        return [row[0].strip().upper() for row in csv.reader(f) if row]
 
-# === STEP 1: get sentiment ===
-print(f"🔍 מחשב סנטימנט עבור {symbol}...")
-sentiment_score = get_sentiment_score(symbol)
-print(f"🧠 ציון סנטימנט: {sentiment_score}")
+def log_action(symbol, sentiment, action, response_status):
+    with open("log.csv", "a", newline="") as f:
+        writer = csv.writer(f)
+        writer.writerow([symbol, sentiment, action, response_status])
 
-# === STEP 2: decide ===
-if sentiment_score > 0.4:
-    action = "buy"
-elif sentiment_score < -0.4:
-    action = "sell"
-else:
-    action = "hold"
-
-print(f"📊 החלטה: {action.upper()}")
-
-# === STEP 3: send order ===
-if action in ["buy", "sell"]:
+def trade(symbol, action, qty=1):
     order = {
         "symbol": symbol,
         "qty": qty,
@@ -42,10 +32,32 @@ if action in ["buy", "sell"]:
         "type": "market",
         "time_in_force": "gtc"
     }
+    print(f"📡 {symbol}: שולח פקודת {action.upper()}...")
+    res = requests.post(f"{BASE_URL}/v2/orders", json=order, headers=HEADERS)
+    print(f"🧾 {symbol}: סטטוס: {res.status_code}")
+    print(f"📬 {symbol}: תגובת השרת:\n{res.text}")
+    return res.status_code
 
-    print(f"📡 שולח פקודת {action.upper()}...")
-    response = requests.post(f"{BASE_URL}/v2/orders", json=order, headers=HEADERS)
-    print(f"🧾 סטטוס: {response.status_code}")
-    print(f"📬 תגובת השרת:\n{response.text}")
-else:
-    print("⏸ אין פעולה. שמירה על מצב קיים.")
+# === Loop over tickers ===
+tickers = read_tickers()
+
+for symbol in tickers:
+    print(f"\n🔍 מחשב סנטימנט עבור {symbol}...")
+    score = get_sentiment_score(symbol)
+    print(f"🧠 {symbol}: ציון סנטימנט: {score}")
+
+    if score > 0.4:
+        action = "buy"
+    elif score < -0.4:
+        action = "sell"
+    else:
+        action = "hold"
+
+    print(f"📊 {symbol}: החלטה: {action.upper()}")
+
+    if action != "hold":
+        status = trade(symbol, action)
+    else:
+        status = "no_action"
+
+    log_action(symbol, score, action, status)
