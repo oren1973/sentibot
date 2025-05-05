@@ -1,70 +1,64 @@
-# refresh v1.2a
+# sentibot_v1_3: שדרוג מנוע הסנטימנט עם ניתוח חדשות אמיתיות
 
-import os
-import csv
 import requests
-from datetime import datetime
-from dotenv import load_dotenv
+from bs4 import BeautifulSoup
 from sentiment import get_sentiment_score
+import time
 
-VERSION = "Sentibot v1.2"
-DATE = datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S")
-
-print(f"🚀 {VERSION} – {DATE}")
-
-load_dotenv()
-
-BASE_URL = os.getenv("ALPACA_PAPER_BASE_URL", "https://paper-api.alpaca.markets")
-API_KEY = os.getenv("ALPACA_API_KEY")
-SECRET_KEY = os.getenv("ALPACA_SECRET_KEY")
+STOCKS = ["AAPL", "TSLA", "NVDA", "MSFT", "META"]
+NEWS_LIMIT = 5  # כמות מקסימלית של כתבות לכל מניה
 
 HEADERS = {
-    "APCA-API-KEY-ID": API_KEY,
-    "APCA-API-SECRET-KEY": SECRET_KEY
+    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/90.0 Safari/537.36'
 }
 
-def read_tickers(file_path="tickers.csv"):
-    with open(file_path, newline='') as f:
-        return [row[0].strip().upper() for row in csv.reader(f) if row]
+def fetch_news_titles(symbol):
+    url = f"https://finance.yahoo.com/quote/{symbol}?p={symbol}"
+    response = requests.get(url, headers=HEADERS)
+    soup = BeautifulSoup(response.text, 'html.parser')
 
-def log_action(timestamp, version, symbol, sentiment, action, status):
-    with open("log.csv", "a", newline="") as f:
-        writer = csv.writer(f)
-        writer.writerow([timestamp, version, symbol, sentiment, action, status])
+    news_items = soup.select('li.js-stream-content')[:NEWS_LIMIT]
+    headlines = []
 
-def trade(symbol, action, qty=1):
-    order = {
-        "symbol": symbol,
-        "qty": qty,
-        "side": action,
-        "type": "market",
-        "time_in_force": "gtc"
-    }
-    print(f"📡 {symbol}: שולח פקודת {action.upper()}...")
-    res = requests.post(f"{BASE_URL}/v2/orders", json=order, headers=HEADERS)
-    print(f"🧾 {symbol}: סטטוס: {res.status_code}")
-    print(f"📬 {symbol}: תגובת השרת:\n{res.text}")
-    return res.status_code
+    for item in news_items:
+        title = item.get_text(strip=True)
+        if title:
+            headlines.append(title)
 
-tickers = read_tickers()
+    return headlines
 
-for symbol in tickers:
+def analyze_sentiment(symbol):
     print(f"\n🔍 מחשב סנטימנט עבור {symbol}...")
-    score = get_sentiment_score(symbol)
-    print(f"🧠 {symbol}: ציון סנטימנט: {score}")
+    headlines = fetch_news_titles(symbol)
+    scores = []
 
-    if score > 0.4:
-        action = "buy"
-    elif score < -0.4:
-        action = "sell"
+    for h in headlines:
+        score = get_sentiment_score(h)
+        scores.append(score)
+        print(f"📰 '{h}' → {score:.4f}")
+
+    if scores:
+        avg = sum(scores) / len(scores)
     else:
-        action = "hold"
+        avg = 0.0
 
-    print(f"📊 {symbol}: החלטה: {action.upper()}")
+    print(f"📊 ממוצע סנטימנט עבור {symbol}: {avg:.3f}")
+    print(f"🧠 {symbol}: ציון סנטימנט: {avg:.3f}")
 
-    if action != "hold":
-        status = trade(symbol, action)
+    if avg >= 0.25:
+        decision = "BUY"
+    elif avg <= -0.25:
+        decision = "SELL"
     else:
-        status = "no_action"
+        decision = "HOLD"
 
-    log_action(DATE, VERSION, symbol, score, action, status)
+    print(f"📊 {symbol}: החלטה: {decision}")
+    return symbol, avg, decision
+
+def main():
+    print("\n🚀 Sentibot v1.3 –", time.strftime("%Y-%m-%d %H:%M:%S"))
+    for symbol in STOCKS:
+        analyze_sentiment(symbol)
+
+if __name__ == '__main__':
+    main()
