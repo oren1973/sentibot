@@ -1,4 +1,4 @@
-# sentibot_v1_3 – גרסה מעודכנת עם ניתוח כותרות מ-RSS של Yahoo Finance
+# sentibot_v1_3.1 – גרסה מעודכנת עם ניתוח כותרות מ-RSS של Yahoo Finance
 
 import os
 import csv
