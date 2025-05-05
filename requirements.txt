@@ -1,6 +1,4 @@
-requests
+vaderSentiment
 beautifulsoup4
-nltk
-feedparser
-alpaca-trade-api
+requests
 python-dotenv
