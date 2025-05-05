@@ -1,6 +1,5 @@
 from vaderSentiment.vaderSentiment import SentimentIntensityAnalyzer
 from news_scraper import fetch_news_titles
-from alpaca_trader import execute_trades
 from config import SYMBOLS
 
 analyzer = SentimentIntensityAnalyzer()
@@ -35,5 +34,4 @@ def analyze_sentiment_for_stocks(symbols):
         print(f"📊 {symbol}: החלטה: {decision}")
         decisions[symbol] = decision
 
-    execute_trades(decisions)
     return decisions
