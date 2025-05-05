@@ -1,7 +1,7 @@
 # sentibot_v1_3: שדרוג מנוע הסנטימנט עם ניתוח חדשות אמיתיות
 
 import requests
-from bs4 import BeautifulSoup
+from news_scraper import fetch_news_titles
 from sentiment import get_sentiment_score
 import time
 
