@@ -1,6 +1,6 @@
 from vaderSentiment.vaderSentiment import SentimentIntensityAnalyzer
 from news_scraper import fetch_news_titles
-from alpaca_trader import execute_trade
+from alpaca_trader import execute_trades
 
 analyzer = SentimentIntensityAnalyzer()
 
