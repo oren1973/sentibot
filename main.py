@@ -1,8 +1,14 @@
 import os
 import csv
 import requests
+from datetime import datetime
 from dotenv import load_dotenv
 from sentiment import get_sentiment_score
+
+VERSION = "Sentibot v1.2"
+DATE = datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S")
+
+print(f"🚀 {VERSION} – {DATE}")
 
 load_dotenv()
 
@@ -19,10 +25,10 @@ def read_tickers(file_path="tickers.csv"):
     with open(file_path, newline='') as f:
         return [row[0].strip().upper() for row in csv.reader(f) if row]
 
-def log_action(symbol, sentiment, action, response_status):
+def log_action(timestamp, version, symbol, sentiment, action, status):
     with open("log.csv", "a", newline="") as f:
         writer = csv.writer(f)
-        writer.writerow([symbol, sentiment, action, response_status])
+        writer.writerow([timestamp, version, symbol, sentiment, action, status])
 
 def trade(symbol, action, qty=1):
     order = {
@@ -38,7 +44,6 @@ def trade(symbol, action, qty=1):
     print(f"📬 {symbol}: תגובת השרת:\n{res.text}")
     return res.status_code
 
-# === Loop over tickers ===
 tickers = read_tickers()
 
 for symbol in tickers:
@@ -60,4 +65,4 @@ for symbol in tickers:
     else:
         status = "no_action"
 
-    log_action(symbol, score, action, status)
+    log_action(DATE, VERSION, symbol, score, action, status)
