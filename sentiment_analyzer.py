@@ -39,7 +39,6 @@ def analyze_sentiment(symbol):
 
 
 ### requirements.txt
-alpaca-trade-api
 vaderSentiment
 feedparser
 requests
