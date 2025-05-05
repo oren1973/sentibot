@@ -1,44 +1,42 @@
-### sentiment_analyzer.py
-import requests
-import os
+import feedparser
 from vaderSentiment.vaderSentiment import SentimentIntensityAnalyzer
 
-RSS_FEED_TEMPLATE = "https://feeds.finance.yahoo.com/rss/2.0/headline?s={symbol}&region=US&lang=en-US"
-
-analyzer = SentimentIntensityAnalyzer()
-
 def fetch_news_titles(symbol):
-    url = RSS_FEED_TEMPLATE.format(symbol=symbol)
-    try:
-        response = requests.get(url, timeout=10)
-        response.raise_for_status()
-    except Exception as e:
-        print(f"⚠️ שגיאה בהורדת כותרות עבור {symbol}: {e}")
-        return []
+    url = f"https://feeds.finance.yahoo.com/rss/2.0/headline?s={symbol}&region=US&lang=en-US"
+    feed = feedparser.parse(url)
+    return [entry.title for entry in feed.entries[:10]]
 
-    import feedparser
-    feed = feedparser.parse(response.text)
-    return [entry.get("title", "") for entry in feed.entries if entry.get("title")]
+def analyze_sentiment(text):
+    analyzer = SentimentIntensityAnalyzer()
+    score = analyzer.polarity_scores(text)["compound"]
+    return score
 
-def analyze_sentiment(symbol):
-    titles = fetch_news_titles(symbol)
-    scores = []
+def analyze_sentiment_for_stocks(symbols):
+    decisions = {}
+    for symbol in symbols:
+        print(f"🔍 מחשב סנטימנט עבור {symbol}...")
+        titles = fetch_news_titles(symbol)
+        scores = []
+        for title in titles:
+            score = analyze_sentiment(title)
+            print(f"📰 '{title}' → {score:.4f}")
+            scores.append(score)
 
-    for title in titles:
-        score = analyzer.polarity_scores(title)["compound"]
-        print(f"📰 '{title}' → {score:.4f}")
-        scores.append(score)
+        if scores:
+            avg_sentiment = sum(scores) / len(scores)
+        else:
+            avg_sentiment = 0.0
 
-    if scores:
-        avg_score = sum(scores) / len(scores)
-    else:
-        avg_score = 0.0
+        print(f"📊 ממוצע סנטימנט עבור {symbol}: {avg_sentiment:.3f}")
+        print(f"🧠 {symbol}: ציון סנטימנט: {avg_sentiment:.3f}")
 
-    print(f"📊 ממוצע סנטימנט עבור {symbol}: {avg_score:.3f}")
-    return avg_score
+        if avg_sentiment > 0.25:
+            decision = "BUY"
+        elif avg_sentiment < -0.25:
+            decision = "SELL"
+        else:
+            decision = "HOLD"
 
-
-### requirements.txt
-vaderSentiment
-feedparser
-requests
+        print(f"📊 {symbol}: החלטה: {decision}")
+        decisions[symbol] = decision
+    return decisions
