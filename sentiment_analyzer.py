@@ -1,5 +1,6 @@
 from vaderSentiment.vaderSentiment import SentimentIntensityAnalyzer
 from news_scraper import fetch_news_titles
+from alpaca_trader import execute_trades
 from config import SYMBOLS
 
 analyzer = SentimentIntensityAnalyzer()
@@ -27,11 +28,12 @@ def analyze_sentiment_for_stocks(symbols):
         decision = "HOLD"
         if avg_sentiment >= 0.3:
             decision = "BUY"
-        elif avg_sentiment <= -0.3:
+        elif avg_sentiment <= -0.1:  # <-- שינוי הסף ל-SELL
             decision = "SELL"
 
         print(f"🧠 {symbol}: ציון סנטימנט: {avg_sentiment:.3f}")
         print(f"📊 {symbol}: החלטה: {decision}")
         decisions[symbol] = decision
 
+    execute_trades(decisions)
     return decisions
