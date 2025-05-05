@@ -1,22 +1,7 @@
-import nltk
-from nltk.sentiment.vader import SentimentIntensityAnalyzer
+import random
 
-nltk.download("vader_lexicon")
-
-analyzer = SentimentIntensityAnalyzer()
-
-def analyze_sentiment():
-    sample = [
-        "GOOGL faces serious issues with AI trust",
-        "AAPL posts record profits for Q1",
-        "META is under FTC investigation again",
-        "AMZN stock gets upgraded by analysts"
-    ]
-    results = []
-    for headline in sample:
-        score = analyzer.polarity_scores(headline)["compound"]
-        results.append({
-            "headline": headline,
-            "sentiment": score
-        })
-    return results
+def get_sentiment_score(symbol):
+    # כאן בעתיד נשתמש ב־VADER וכותרות אמיתיות
+    score = round(random.uniform(-1, 1), 3)
+    print(f"🔬 סנטימנט מזויף עבור {symbol}: {score}")
+    return score
