@@ -2,3 +2,4 @@ vaderSentiment
 beautifulsoup4
 requests
 python-dotenv
+feedparser
