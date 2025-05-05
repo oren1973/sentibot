@@ -5,7 +5,7 @@ import requests
 # קריאה למשתני הסביבה
 API_KEY = os.getenv("ALPACA_API_KEY")
 SECRET_KEY = os.getenv("ALPACA_SECRET_KEY")
-BASE_URL = os.getenv("ALPACA_PAPER_BASE_URL", "https://paper-api.alpaca.markets/v2")
+BASE_URL = os.getenv("ALPACA_PAPER_BASE_URL", "https://paper-api.alpaca.markets")
 
 HEADERS = {
     "APCA-API-KEY-ID": API_KEY,
@@ -24,7 +24,7 @@ test_order = {
 print("📡 מנסה לבצע פקודת קנייה לבדיקה...")
 
 try:
-    response = requests.post(f"{BASE_URL}/orders", json=test_order, headers=HEADERS)
+    response = requests.post(f"{BASE_URL}/v2/orders", json=test_order, headers=HEADERS)
     print(f"🧾 סטטוס: {response.status_code}")
     print("📬 תגובת השרת:")
     print(response.text)
