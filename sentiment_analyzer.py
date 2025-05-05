@@ -1,39 +1,39 @@
 from vaderSentiment.vaderSentiment import SentimentIntensityAnalyzer
 from news_scraper import fetch_news_titles
 from alpaca_trader import execute_trades
+from config import SYMBOLS
 
 analyzer = SentimentIntensityAnalyzer()
 
+def compute_sentiment_score(headlines):
+    if not headlines:
+        return 0.0
+    scores = [analyzer.polarity_scores(title)["compound"] for title in headlines]
+    return sum(scores) / len(scores)
+
 def analyze_sentiment_for_stocks(symbols):
+    decisions = {}
+
     for symbol in symbols:
         print(f"🔍 מחשב סנטימנט עבור {symbol}...")
-        titles = fetch_news_titles(symbol)
 
-        scores = []
-        for title in titles:
-            sentiment = analyzer.polarity_scores(title)['compound']
-            print(f"📰 '{title}' → {sentiment:.4f}")
-            scores.append(sentiment)
+        headlines = fetch_news_titles(symbol)
+        for title in headlines:
+            score = analyzer.polarity_scores(title)["compound"]
+            print(f"📰 '{title}' → {score:.4f}")
 
-        if scores:
-            avg_score = sum(scores) / len(scores)
-        else:
-            avg_score = 0
+        avg_sentiment = compute_sentiment_score(headlines)
+        print(f"📊 ממוצע סנטימנט עבור {symbol}: {avg_sentiment:.3f}")
 
-        print(f"📊 ממוצע סנטימנט עבור {symbol}: {avg_score:.3f}")
-        print(f"🧠 {symbol}: ציון סנטימנט: {avg_score:.3f}")
-
-        # החלטה
-        if avg_score > 0.3:
+        decision = "HOLD"
+        if avg_sentiment >= 0.3:
             decision = "BUY"
-        elif avg_score < -0.3:
+        elif avg_sentiment <= -0.3:
             decision = "SELL"
-        else:
-            decision = "HOLD"
 
+        print(f"🧠 {symbol}: ציון סנטימנט: {avg_sentiment:.3f}")
         print(f"📊 {symbol}: החלטה: {decision}")
+        decisions[symbol] = decision
 
-        if decision == "BUY":
-            execute_trade(symbol, "buy")
-        elif decision == "SELL":
-            execute_trade(symbol, "sell")
+    execute_trades(decisions)
+    return decisions
