@@ -1,31 +1,19 @@
-# sentiment_analyzer.py – גרסה משופרת עם סף SELL וסינון כותרות ניטרליות
-
 from vaderSentiment.vaderSentiment import SentimentIntensityAnalyzer
 from news_scraper import fetch_news_titles
 from config import SYMBOLS
 
 analyzer = SentimentIntensityAnalyzer()
 
-# גבולות לסינון כותרות אפורות
-NEUTRAL_MIN = -0.05
-NEUTRAL_MAX = 0.05
-
-# סף מותאם ל-SELL חכם
-SELL_THRESHOLD = -0.3
-BUY_THRESHOLD = 0.3
-
 def compute_sentiment_score(headlines):
     if not headlines:
         return 0.0
-    filtered_scores = []
+
+    scores = []
     for title in headlines:
         score = analyzer.polarity_scores(title)["compound"]
-        if NEUTRAL_MIN <= score <= NEUTRAL_MAX:
-            continue  # דילוג על כותרות אפורות
-        filtered_scores.append(score)
-    if not filtered_scores:
-        return 0.0
-    return sum(filtered_scores) / len(filtered_scores)
+        scores.append(score)
+
+    return sum(scores) / len(scores) if scores else 0.0
 
 def adjust_sentiment_score(symbol, avg_sentiment):
     adjustment_factors = {
@@ -55,9 +43,9 @@ def analyze_sentiment_for_stocks(symbols):
         print(f"📊 {symbol}: סנטימנט משוקלל: {adjusted_sentiment:.3f}")
 
         decision = "HOLD"
-        if adjusted_sentiment >= BUY_THRESHOLD:
+        if adjusted_sentiment >= 0.3:
             decision = "BUY"
-        elif adjusted_sentiment <= SELL_THRESHOLD:
+        elif adjusted_sentiment <= -0.1:
             decision = "SELL"
 
         print(f"📊 {symbol}: החלטה: {decision}")
