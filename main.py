@@ -32,13 +32,12 @@ for symbol in SYMBOLS:
         sentiments.append(sentiment)
         print(f"📰 '{article}' → {sentiment:.4f}")
 
-    # חישוב ממוצע סנטימנט
-    avg_sentiment = sum(sentiments) / len(sentiments)
+    # קבלת החלטת מסחר
     decision = make_recommendation(all_articles)
 
-    print(f"📊 {symbol}: סנטימנט משוקלל: {avg_sentiment:.3f}")
-    print(f"📊 {symbol}: החלטה: {decision.upper()}")
+    print(f"📊 {symbol}: סנטימנט משוקלל: {decision['sentiment']:.3f}")
+    print(f"📊 {symbol}: החלטה: {decision['decision'].upper()}")
 
-    time.sleep(1)  # השהייה קטנה בין מניות
+    time.sleep(1)
 
 print("✅ הסתיים בהצלחה.")
