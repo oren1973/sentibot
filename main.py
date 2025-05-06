@@ -32,9 +32,9 @@ for symbol in SYMBOLS:
         sentiments.append(sentiment)
         print(f"📰 '{article}' → {sentiment:.4f}")
 
-    # חישוב ממוצע משוקלל
+    # חישוב ממוצע סנטימנט
     avg_sentiment = sum(sentiments) / len(sentiments)
-    decision = make_recommendation(all_titles)
+    decision = make_recommendation(all_articles)
 
     print(f"📊 {symbol}: סנטימנט משוקלל: {avg_sentiment:.3f}")
     print(f"📊 {symbol}: החלטה: {decision.upper()}")
