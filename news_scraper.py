@@ -1,6 +1,6 @@
-# news_scraper.py – גרסה עם סינון כותרות לא רלוונטיות (junk filtering)
-
+# news_scraper.py – גרסה חדשה עם source + published_at
 import feedparser
+from datetime import datetime
 
 JUNK_PHRASES = [
     "Entertainment",
@@ -17,16 +17,21 @@ def is_relevant(title):
             return False
     return True
 
-def fetch_news_titles(symbol, limit=10):
+def fetch_news_items(symbol, limit=10):
     rss_url = f"https://feeds.finance.yahoo.com/rss/2.0/headline?s={symbol}&region=US&lang=en-US"
     feed = feedparser.parse(rss_url)
 
-    headlines = []
+    items = []
     for entry in feed.entries:
         title = entry.title.strip()
         if is_relevant(title):
-            headlines.append(title)
-        if len(headlines) >= limit:
+            item = {
+                "title": title,
+                "source": "Yahoo Finance",
+                "published_at": datetime(*entry.published_parsed[:6]) if hasattr(entry, 'published_parsed') else datetime.now()
+            }
+            items.append(item)
+        if len(items) >= limit:
             break
 
-    return headlines
+    return items
