@@ -34,7 +34,7 @@ for symbol in SYMBOLS:
 
     # חישוב ממוצע משוקלל
     avg_sentiment = sum(sentiments) / len(sentiments)
-    decision = make_recommendation(avg_sentiment)
+    decision = make_recommendation(all_titles)
 
     print(f"📊 {symbol}: סנטימנט משוקלל: {avg_sentiment:.3f}")
     print(f"📊 {symbol}: החלטה: {decision.upper()}")
