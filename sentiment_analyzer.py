@@ -1,5 +1,5 @@
 from yahoo_scraper import fetch_yahoo_titles
-from marketwatch_scraper import fetch_marketwatch_titles
+from investors_scraper import fetch_investors_titles
 from sentiment import analyze_sentiment
 
 def analyze_sentiment_for_stocks(symbols):
@@ -9,34 +9,40 @@ def analyze_sentiment_for_stocks(symbols):
         print(f"🔍 מחשב סנטימנט עבור {symbol}...")
 
         headlines = []
+
+        # Fetch from Yahoo
         yahoo_titles = fetch_yahoo_titles(symbol)
-        if yahoo_titles:
-            headlines.extend(yahoo_titles)
+        headlines.extend([f"{title} [Yahoo]" for title in yahoo_titles])
 
-        marketwatch_titles = fetch_marketwatch_titles(symbol)
-        if marketwatch_titles:
-            headlines.extend(marketwatch_titles)
+        # Fetch from Investors.com
+        investors_titles = fetch_investors_titles(symbol)
+        headlines.extend([f"{title} [Investors]" for title in investors_titles])
 
-        sentiment_scores = []
-        for title in headlines:
-            score = analyze_sentiment(title)
-            print(f"📰 '{title}' → {score:.4f}")
-            sentiment_scores.append(score)
+        if not headlines:
+            print(f"⚠️ לא נמצאו כותרות עבור {symbol}")
+            results[symbol] = {"sentiment": 0.0, "decision": "HOLD"}
+            continue
 
-        if sentiment_scores:
-            avg_sentiment = sum(sentiment_scores) / len(sentiment_scores)
-        else:
-            avg_sentiment = 0.0
+        # Analyze each title
+        sentiments = [analyze_sentiment(title) for title in headlines]
 
-        if avg_sentiment > 0.15:
+        # Calculate weighted average
+        weighted_sentiment = sum(sentiments) / len(sentiments)
+
+        # Decision logic
+        if weighted_sentiment > 0.2:
             decision = "BUY"
-        elif avg_sentiment < -0.15:
+        elif weighted_sentiment < -0.2:
             decision = "SELL"
         else:
             decision = "HOLD"
 
-        print(f"📊 {symbol}: סנטימנט משוקלל: {avg_sentiment:.3f}")
+        results[symbol] = {"sentiment": weighted_sentiment, "decision": decision}
+
+        # Print summary
+        for title, score in zip(headlines, sentiments):
+            print(f"📰 '{title}' → {score:.4f}")
+        print(f"📊 {symbol}: סנטימנט משוקלל: {weighted_sentiment:.3f}")
         print(f"📊 {symbol}: החלטה: {decision}")
-        results[symbol] = {"sentiment": avg_sentiment, "decision": decision}
 
     return results
