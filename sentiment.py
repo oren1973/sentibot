@@ -1,39 +1,32 @@
-import requests
-from bs4 import BeautifulSoup
-from nltk.sentiment.vader import SentimentIntensityAnalyzer
+import re
 import nltk
+from nltk.sentiment.vader import SentimentIntensityAnalyzer
 
-nltk.download('vader_lexicon', quiet=True)
+# הורדת משאבים נחוצים אם לא קיימים
+try:
+    nltk.data.find('sentiment/vader_lexicon.zip')
+except LookupError:
+    nltk.download('vader_lexicon')
 
+# אתחול המנתח
 analyzer = SentimentIntensityAnalyzer()
 
-def get_sentiment_score(symbol):
-    url = f"https://finance.yahoo.com/quote/{symbol}?p={symbol}"
-    headers = {
-        "User-Agent": "Mozilla/5.0"
-    }
+def clean_text(text):
+    """
+    מנקה טקסט מכותרות לצורך ניתוח סנטימנט:
+    - מסיר HTML, לינקים, תווים מיוחדים וכפילויות רווחים
+    """
+    text = re.sub(r'<[^>]+>', '', text)         # HTML tags
+    text = re.sub(r'http\S+', '', text)         # URLs
+    text = re.sub(r'[^a-zA-Z0-9\s]', '', text)  # Special characters
+    text = re.sub(r'\s+', ' ', text)            # Extra spaces
+    return text.strip()
 
-    try:
-        res = requests.get(url, headers=headers)
-        soup = BeautifulSoup(res.text, "html.parser")
-        headlines = soup.find_all("h3")
-
-        scores = []
-        for tag in headlines:
-            text = tag.get_text().strip()
-            if len(text) > 10:
-                score = analyzer.polarity_scores(text)["compound"]
-                scores.append(score)
-                print(f"📰 '{text}' → {score}")
-
-        if scores:
-            avg = round(sum(scores) / len(scores), 3)
-            print(f"📊 ממוצע סנטימנט עבור {symbol}: {avg}")
-            return avg
-        else:
-            print("⚠️ לא נמצאו כותרות תקפות.")
-            return 0.0
-
-    except Exception as e:
-        print(f"❌ שגיאה בסריקת כותרות: {e}")
-        return 0.0
+def get_sentiment_score(text):
+    """
+    מחשב את סנטימנט הכותרת לפי מנתח VADER של NLTK.
+    מחזיר ציון בין -1 ל-1 (שלילי עד חיובי)
+    """
+    cleaned = clean_text(text)
+    score = analyzer.polarity_scores(cleaned)['compound']
+    return round(score, 4)
