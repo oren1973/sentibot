@@ -5,6 +5,26 @@ from config import SYMBOLS
 
 analyzer = SentimentIntensityAnalyzer()
 
+# רגישות מותאמת למניה
+SENSITIVITY_FACTORS = {
+    "AAPL": 1.0,
+    "TSLA": 1.5,
+    "NVDA": 1.3,
+    "MSFT": 0.8,
+    "META": 1.2,
+}
+
+# סינון כותרות לא ממוקדות
+def is_relevant(title, symbol):
+    symbol_keywords = {
+        "AAPL": ["Apple"],
+        "TSLA": ["Tesla"],
+        "NVDA": ["Nvidia"],
+        "MSFT": ["Microsoft"],
+        "META": ["Meta", "Facebook"],
+    }
+    return any(keyword.lower() in title.lower() for keyword in symbol_keywords.get(symbol, []))
+
 def compute_sentiment_score(headlines):
     if not headlines:
         return 0.0
@@ -16,22 +36,26 @@ def analyze_sentiment_for_stocks(symbols):
 
     for symbol in symbols:
         print(f"🔍 מחשב סנטימנט עבור {symbol}...")
-
         headlines = fetch_news_titles(symbol)
-        for title in headlines:
+        filtered = [h for h in headlines if is_relevant(h, symbol)]
+
+        for title in filtered:
             score = analyzer.polarity_scores(title)["compound"]
             print(f"📰 '{title}' → {score:.4f}")
 
-        avg_sentiment = compute_sentiment_score(headlines)
-        print(f"📊 ממוצע סנטימנט עבור {symbol}: {avg_sentiment:.3f}")
+        avg_sentiment = compute_sentiment_score(filtered)
+        factor = SENSITIVITY_FACTORS.get(symbol, 1.0)
+        adjusted_sentiment = avg_sentiment * factor
+
+        print(f"📊 ממוצע סנטימנט עבור {symbol}: {avg_sentiment:.3f} (מותאם: {adjusted_sentiment:.3f})")
 
         decision = "HOLD"
-        if avg_sentiment >= 0.3:
+        if adjusted_sentiment >= 0.3:
             decision = "BUY"
-        elif avg_sentiment <= -0.1:  # <-- שינוי הסף ל-SELL
+        elif adjusted_sentiment <= -0.1:
             decision = "SELL"
 
-        print(f"🧠 {symbol}: ציון סנטימנט: {avg_sentiment:.3f}")
+        print(f"🧠 {symbol}: ציון סנטימנט מותאם: {adjusted_sentiment:.3f}")
         print(f"📊 {symbol}: החלטה: {decision}")
         decisions[symbol] = decision
 
