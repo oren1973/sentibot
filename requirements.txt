@@ -5,3 +5,4 @@ python-dotenv
 feedparser
 alpaca-trade-api
 nltk
+feedparser
