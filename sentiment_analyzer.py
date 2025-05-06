@@ -1,25 +1,11 @@
+# sentiment_analyzer.py – גרסה עם מנוע משוקלל
 from vaderSentiment.vaderSentiment import SentimentIntensityAnalyzer
-from news_scraper import fetch_news_titles
-from config import SYMBOLS
+from news_scraper import fetch_news_items
+from config import SYMBOLS, SOURCE_WEIGHTS, LAMBDA_DECAY
+from sentibot_weighted_sentiment import calculate_weighted_sentiment, Headline
+from datetime import datetime
 
 analyzer = SentimentIntensityAnalyzer()
-
-def compute_sentiment_score(headlines):
-    if not headlines:
-        return 0.0
-    scores = [analyzer.polarity_scores(title)["compound"] for title in headlines]
-    return sum(scores) / len(scores)
-
-def adjust_sentiment_score(symbol, avg_sentiment):
-    adjustment_factors = {
-        "AAPL": 1.0,
-        "TSLA": 1.5,
-        "NVDA": 1.3,
-        "MSFT": 0.8,
-        "META": 1.2
-    }
-    factor = adjustment_factors.get(symbol, 1.0)
-    return avg_sentiment * factor
 
 def analyze_sentiment_for_stocks(symbols):
     decisions = {}
@@ -27,21 +13,31 @@ def analyze_sentiment_for_stocks(symbols):
     for symbol in symbols:
         print(f"🔍 מחשב סנטימנט עבור {symbol}...")
 
-        headlines = fetch_news_titles(symbol)
-        for title in headlines:
+        raw_items = fetch_news_items(symbol)
+        headlines = []
+
+        for item in raw_items:
+            title = item['title']
             score = analyzer.polarity_scores(title)["compound"]
             print(f"📰 '{title}' → {score:.4f}")
 
-        avg_sentiment = compute_sentiment_score(headlines)
-        adjusted_sentiment = adjust_sentiment_score(symbol, avg_sentiment)
+            headline = Headline(
+                symbol=symbol,
+                sentiment_score=score,
+                source=item.get("source", "Unknown"),
+                published_at=item.get("published_at", datetime.now())
+            )
+            headlines.append(headline)
 
-        print(f"📊 ממוצע סנטימנט עבור {symbol}: {avg_sentiment:.3f} (מותאם: {adjusted_sentiment:.3f})")
-        print(f"🧠 {symbol}: ציון סנטימנט מותאם: {adjusted_sentiment:.3f}")
+        weighted_scores = calculate_weighted_sentiment(headlines)
+        sentiment = weighted_scores.get(symbol, 0.0)
+
+        print(f"📊 {symbol}: סנטימנט משוקלל: {sentiment:.3f}")
 
         decision = "HOLD"
-        if adjusted_sentiment >= 0.3:
+        if sentiment >= 0.3:
             decision = "BUY"
-        elif adjusted_sentiment <= -0.1:
+        elif sentiment <= -0.1:
             decision = "SELL"
 
         print(f"📊 {symbol}: החלטה: {decision}")
