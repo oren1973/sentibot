@@ -1,17 +1,20 @@
-def generate_recommendations(sentiment_data, threshold=0.6):
+from sentiment_analyzer import analyze_sentiment
+
+def make_recommendation(titles):
     """
-    מקבל רשימת כותרות עם סנטימנט, מחזיר רשימת המלצות.
+    מקבל רשימת כותרות חדשות, מנתח סנטימנט, ומחזיר המלצה: BUY, HOLD או SELL
     """
-    recommendations = []
+    if not titles:
+        return {"sentiment": 0.0, "decision": "HOLD"}
 
-    for item in sentiment_data:
-        score = item["sentiment_score"]
-        sentiment = item["sentiment"]
-        headline = item["headline"]
+    sentiment_scores = [analyze_sentiment(title) for title in titles]
+    avg_sentiment = sum(sentiment_scores) / len(sentiment_scores)
 
-        if sentiment == "חיובי" and score >= threshold:
-            recommendations.append(f"קנייה: {headline} (ציון {score:.2f})")
-        elif sentiment == "שלילי" and score >= threshold:
-            recommendations.append(f"מכירה/זהירות: {headline} (ציון {score:.2f})")
+    if avg_sentiment > 0.2:
+        decision = "BUY"
+    elif avg_sentiment < -0.2:
+        decision = "SELL"
+    else:
+        decision = "HOLD"
 
-    return recommendations
+    return {"sentiment": round(avg_sentiment, 3), "decision": decision}
