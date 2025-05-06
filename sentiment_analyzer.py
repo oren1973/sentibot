@@ -1,6 +1,7 @@
 from yahoo_scraper import fetch_yahoo_titles
 from investors_scraper import fetch_investors_titles
 from sentiment import analyze_sentiment
+from investors_scraper import get_investors_news
 
 def analyze_sentiment_for_stocks(symbols):
     results = {}
