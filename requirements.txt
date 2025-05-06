@@ -6,3 +6,4 @@ feedparser
 alpaca-trade-api
 nltk
 feedparser
+praw
