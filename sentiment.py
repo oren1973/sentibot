@@ -2,31 +2,29 @@ import re
 import nltk
 from nltk.sentiment.vader import SentimentIntensityAnalyzer
 
-# הורדת משאבים נחוצים אם לא קיימים
-try:
-    nltk.data.find('sentiment/vader_lexicon.zip')
-except LookupError:
-    nltk.download('vader_lexicon')
+# ודא שה-lexicon זמין
+nltk.download('vader_lexicon')
 
-# אתחול המנתח
 analyzer = SentimentIntensityAnalyzer()
 
 def clean_text(text):
     """
-    מנקה טקסט מכותרות לצורך ניתוח סנטימנט:
-    - מסיר HTML, לינקים, תווים מיוחדים וכפילויות רווחים
+    מנקה טקסט לפני ניתוח סנטימנט:
+    - הסרת HTML, סימנים מיוחדים ולינקים
+    - שמירת תווים בסיסיים בלבד
     """
-    text = re.sub(r'<[^>]+>', '', text)         # HTML tags
-    text = re.sub(r'http\S+', '', text)         # URLs
-    text = re.sub(r'[^a-zA-Z0-9\s]', '', text)  # Special characters
-    text = re.sub(r'\s+', ' ', text)            # Extra spaces
+    text = re.sub(r'<.*?>', '', text)
+    text = re.sub(r'http\S+', '', text)
+    text = re.sub(r'[^a-zA-Z0-9\s.,!?\'\"-]', '', text)
     return text.strip()
 
 def get_sentiment_score(text):
     """
-    מחשב את סנטימנט הכותרת לפי מנתח VADER של NLTK.
-    מחזיר ציון בין -1 ל-1 (שלילי עד חיובי)
+    מחשב ציון סנטימנט בין -1 ל־1.
     """
     cleaned = clean_text(text)
-    score = analyzer.polarity_scores(cleaned)['compound']
-    return round(score, 4)
+    score = analyzer.polarity_scores(cleaned)
+    return score['compound']
+
+# Alias for backward compatibility
+analyze_sentiment = get_sentiment_score
