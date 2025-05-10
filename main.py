@@ -11,6 +11,12 @@ SYMBOLS = [
     "PFE", "XOM", "JPM", "DIS", "WMT"
 ]
 
+source_weights = {
+    "yahoo": 1.0,
+    "investors": 1.2,
+    "reddit": 0.8
+}
+
 print("🚀 Sentibot v1.5 – מופעל ✅")
 
 for symbol in SYMBOLS:
@@ -21,24 +27,33 @@ for symbol in SYMBOLS:
     investors_articles = get_investors_news(symbol)
     reddit_posts = get_reddit_posts(symbol)
 
-    all_articles = yahoo_articles + investors_articles + reddit_posts
+    sentiment_by_source = {}
 
-    if not all_articles:
-        print(f"⚠️ לא נמצאו כתבות או פוסטים עבור {symbol}")
-        continue
+    for source_name, texts in {
+        "yahoo": yahoo_articles,
+        "investors": investors_articles,
+        "reddit": reddit_posts
+    }.items():
+        if texts:
+            sentiments = [analyze_sentiment(text) for text in texts]
+            avg = sum(sentiments) / len(sentiments)
+            sentiment_by_source[source_name] = avg
+            print(f"📊 {symbol}: ממוצע {source_name}: {avg:.3f}")
+        else:
+            sentiment_by_source[source_name] = 0.0
+            print(f"⚠️ {symbol}: אין נתונים מ־{source_name}")
 
-    # ניתוח סנטימנט
-    sentiments = []
-    for text in all_articles:
-        score = analyze_sentiment(text)
-        sentiments.append(score)
-        print(f"📰 '{text[:80]}...' → {score:.4f}")
+    # ממוצע סנטימנט משוקלל
+    total_weight = sum(source_weights.values())
+    weighted_sum = sum(
+        sentiment_by_source[src] * source_weights[src] for src in source_weights
+    )
+    avg_sentiment = weighted_sum / total_weight
 
-    avg_sentiment = sum(sentiments) / len(sentiments)
     result = make_recommendation(avg_sentiment)
 
-    print(f"📊 {symbol}: סנטימנט משוקלל: {avg_sentiment:.3f}")
-    print(f"📊 {symbol}: החלטה: {result['decision'].upper()}")
+    print(f"📊 {symbol}: סנטימנט משוקלל סופי: {avg_sentiment:.3f}")
+    print(f"📈 {symbol}: החלטה: {result['decision'].upper()}")
 
     time.sleep(1)
 
