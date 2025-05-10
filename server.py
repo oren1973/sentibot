@@ -1,11 +1,9 @@
-import subprocess
 import time
 from flask import Flask, send_file
 import os
+import main  # ייבוא ישיר
 
 app = Flask(__name__)
-
-# 🔄 שימוש בנתיב /tmp
 LOG_FILE_PATH = "/tmp/learning_log.csv"
 
 @app.route("/")
@@ -25,12 +23,7 @@ def download_log():
 
 if __name__ == "__main__":
     print("🚀 מריץ את Sentibot (main.py)...")
-    try:
-        subprocess.run(["python", "main.py"], check=True)
-        print("✅ Sentibot הסתיים. הקובץ אמור להיווצר.")
-    except subprocess.CalledProcessError as e:
-        print(f"❌ שגיאה בהרצת main.py: {e}")
-
+    main.run_sentibot()
     time.sleep(1)
-    print("📂 קבצים בתיקיית /tmp:", os.listdir("/tmp"))
+    print(f"📂 קבצים בתיקיית /tmp:", os.listdir("/tmp"))
     app.run(debug=True, host="0.0.0.0", port=8000)
