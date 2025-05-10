@@ -1,29 +1,24 @@
-import time
+# server.py – גרסה תקינה עבור sentibot-doc
+
 from flask import Flask, send_file
 import os
-import main  # ייבוא ישיר
 
 app = Flask(__name__)
-LOG_FILE_PATH = "/tmp/learning_log.csv"
 
 @app.route("/")
 def home():
-    file_exists = os.path.exists(LOG_FILE_PATH)
-    return f"""
-    <h3>Sentibot is alive ✅</h3>
-    <p>File exists: {'✅' if file_exists else '❌'} at <code>{LOG_FILE_PATH}</code></p>
-    <p><a href='/download-log'>Download learning_log.csv</a></p>
-    """
+    return "<h1>Sentibot: תיעוד פעולות</h1><a href='/download-log'>📄 הורד את קובץ הלמידה</a>"
 
 @app.route("/download-log")
 def download_log():
-    if not os.path.exists(LOG_FILE_PATH):
-        return f"Error: File not found at {LOG_FILE_PATH}", 404
-    return send_file(LOG_FILE_PATH, as_attachment=True)
+    log_path = "/tmp/learning_log.csv"
+    if os.path.exists(log_path):
+        return send_file(log_path, as_attachment=True)
+    else:
+        return "⚠️ הקובץ לא נמצא. ודא שהרצת את Sentibot לפחות פעם אחת.", 404
+
+# מריץ את Sentibot במצב תיעוד (לא חובה, אבל שומר על עדכניות)
+os.system("python main.py")
 
 if __name__ == "__main__":
-    print("🚀 מריץ את Sentibot (main.py)...")
-    main.run_sentibot()
-    time.sleep(1)
-    print(f"📂 קבצים בתיקיית /tmp:", os.listdir("/tmp"))
     app.run(debug=True, host="0.0.0.0", port=8000)
