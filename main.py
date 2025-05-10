@@ -1,3 +1,4 @@
+# main.py – גרסה מתוקנת לשמירת log ושליחת פקודות לאלפאקה
 import time
 import os
 import smtplib
@@ -16,7 +17,9 @@ SYMBOLS = ["AAPL", "TSLA", "NVDA", "MSFT", "META", "PFE", "XOM", "JPM", "DIS", "
 
 print("🚀 Sentibot v1.5 – מופעל ✅")
 
-log_path = "/tmp/learning_log.csv"
+# שמור את הקובץ בתקיית הבסיס – לא ב־/tmp
+log_path = "learning_log.csv"
+
 try:
     log_df = pd.read_csv(log_path)
     run_id = int(log_df["run_id"].max()) + 1
@@ -47,6 +50,8 @@ for symbol in SYMBOLS:
     print(f"📈 {symbol}: החלטה: {result['decision'].upper()}")
 
     prev = log_df[log_df["symbol"] == symbol].sort_values("datetime").iloc[-1]["decision"] if symbol in log_df["symbol"].values else ""
+    print(f"🔁 {symbol}: החלטה קודמת: {prev}, החלטה נוכחית: {result['decision']}")
+
     new_rows.append({
         "run_id": run_id,
         "symbol": symbol,
@@ -56,7 +61,6 @@ for symbol in SYMBOLS:
         "previous_decision": prev
     })
 
-    # שלח הוראה רק אם יש שינוי בהחלטה
     if result["decision"] in ["buy", "sell"] and result["decision"] != prev:
         trade_stock(symbol, result["decision"])
 
@@ -67,7 +71,7 @@ updated_log_df.to_csv(log_path, index=False)
 
 print(f"✅ הסתיים בהצלחה.")
 print(f"📄 נוצר קובץ log: {log_path}")
-print(f"📂 קבצים בתיקיית /tmp: {os.listdir('/tmp')}")
+print(f"📂 קבצים בתיקייה: {os.listdir('.')}")
 
 # שליחת מייל
 EMAIL = os.getenv("EMAIL_USER")
