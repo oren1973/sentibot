@@ -68,3 +68,7 @@ updated_log_df.to_csv(log_path, index=False)
 print(f"✅ הסתיים בהצלחה.")
 print(f"📄 נוצר קובץ log: {log_path}")
 print(f"📂 קבצים בתיקיית /tmp: {os.listdir('/tmp')}")
+
+from email_sender import send_run_success_email
+send_run_success_email(run_id)
+
