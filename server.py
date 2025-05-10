@@ -20,10 +20,9 @@ if __name__ == "__main__":
     print("🚀 מריץ את Sentibot (main.py)...")
     try:
         subprocess.run(["python", "main.py"], check=True)
-        print("✅ Sentibot הסתיים. מעלים את השרת...")
+        print("✅ Sentibot הסתיים. הקובץ אמור להיווצר.")
     except subprocess.CalledProcessError as e:
         print(f"❌ שגיאה בהרצת main.py: {e}")
-    
-    time.sleep(1)  # שיהיה זמן ל־CSV להיווצר
 
+    time.sleep(1)
     app.run(debug=True, host="0.0.0.0", port=8000)
