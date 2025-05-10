@@ -25,8 +25,8 @@ ALPACA_SECRET_KEY = os.getenv("ALPACA_SECRET_KEY")
 ALPACA_BASE_URL = "https://paper-api.alpaca.markets"
 alpaca = REST(ALPACA_API_KEY, ALPACA_SECRET_KEY, base_url=ALPACA_BASE_URL)
 
-# ודא שהקובץ נשמר ליד הקבצים
-log_file = os.path.join(os.path.dirname(__file__), "learning_log.csv")
+# 🔄 שינוי חשוב: שמירה בתיקיית tmp
+log_file = "/tmp/learning_log.csv"
 
 print("🚀 Sentibot v1.5 – מופעל ✅")
 
@@ -104,4 +104,4 @@ else:
 
 print("✅ הסתיים בהצלחה.")
 print(f"📄 נוצר קובץ log: {log_file}")
-print("📂 קבצים בתיקייה:", os.listdir(os.path.dirname(__file__)))
+print("📂 קבצים בתיקיית /tmp:", os.listdir("/tmp"))
