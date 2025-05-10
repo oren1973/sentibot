@@ -1,5 +1,5 @@
 import os
-from alpaca_trade_api.rest import REST, TimeInForce
+from alpaca_trade_api.rest import REST
 
 def trade_stock(symbol, decision):
     key = os.getenv("ALPACA_API_KEY")
@@ -15,10 +15,10 @@ def trade_stock(symbol, decision):
     try:
         qty = 1
         if decision == "buy":
-            api.submit_order(symbol=symbol, qty=qty, side="buy", type="market", time_in_force=TimeInForce.DAY)
+            api.submit_order(symbol=symbol, qty=qty, side="buy", type="market", time_in_force="day")
             print(f"✅ נשלחה הוראת קניה ל־{symbol}")
         elif decision == "sell":
-            api.submit_order(symbol=symbol, qty=qty, side="sell", type="market", time_in_force=TimeInForce.DAY)
+            api.submit_order(symbol=symbol, qty=qty, side="sell", type="market", time_in_force="day")
             print(f"✅ נשלחה הוראת מכירה ל־{symbol}")
     except Exception as e:
         print(f"❌ שגיאה בשליחת הוראה ל־{symbol}: {e}")
