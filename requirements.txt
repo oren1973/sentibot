@@ -7,3 +7,4 @@ alpaca-trade-api
 nltk
 feedparser
 praw
+flask
