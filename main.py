@@ -1,19 +1,18 @@
-# main.py – גרסה עם run_id ו־previous_decision
 import time
 import os
+import smtplib
 import pandas as pd
 from datetime import datetime
+from email.message import EmailMessage
 
 from sentiment_analyzer import analyze_sentiment
 from yahoo_scraper import get_yahoo_news
 from investors_scraper import get_investors_news
 from reddit_scraper import get_reddit_posts
 from recommender import make_recommendation
+from alpaca_trader import trade_stock
 
-SYMBOLS = [
-    "AAPL", "TSLA", "NVDA", "MSFT", "META",
-    "PFE", "XOM", "JPM", "DIS", "WMT"
-]
+SYMBOLS = ["AAPL", "TSLA", "NVDA", "MSFT", "META", "PFE", "XOM", "JPM", "DIS", "WMT"]
 
 print("🚀 Sentibot v1.5 – מופעל ✅")
 
@@ -34,7 +33,6 @@ for symbol in SYMBOLS:
     yahoo_articles = get_yahoo_news(symbol)
     investors_articles = get_investors_news(symbol)
     reddit_posts = get_reddit_posts(symbol)
-
     all_articles = yahoo_articles + investors_articles + reddit_posts
 
     if not all_articles:
@@ -43,14 +41,12 @@ for symbol in SYMBOLS:
 
     sentiments = [analyze_sentiment(text) for text in all_articles]
     avg_sentiment = sum(sentiments) / len(sentiments)
-
     result = make_recommendation(avg_sentiment)
 
     print(f"📊 {symbol}: סנטימנט משוקלל סופי: {avg_sentiment:.3f}")
     print(f"📈 {symbol}: החלטה: {result['decision'].upper()}")
 
     prev = log_df[log_df["symbol"] == symbol].sort_values("datetime").iloc[-1]["decision"] if symbol in log_df["symbol"].values else ""
-
     new_rows.append({
         "run_id": run_id,
         "symbol": symbol,
@@ -59,6 +55,10 @@ for symbol in SYMBOLS:
         "decision": result["decision"],
         "previous_decision": prev
     })
+
+    # שלח הוראה רק אם יש שינוי בהחלטה
+    if result["decision"] in ["buy", "sell"] and result["decision"] != prev:
+        trade_stock(symbol, result["decision"])
 
     time.sleep(1)
 
@@ -69,6 +69,22 @@ print(f"✅ הסתיים בהצלחה.")
 print(f"📄 נוצר קובץ log: {log_path}")
 print(f"📂 קבצים בתיקיית /tmp: {os.listdir('/tmp')}")
 
-from email_sender import send_run_success_email
-send_run_success_email(run_id)
+# שליחת מייל
+EMAIL = os.getenv("EMAIL_USER")
+PASS = os.getenv("EMAIL_PASS")
+TO = os.getenv("EMAIL_RECEIVER")
 
+try:
+    msg = EmailMessage()
+    msg.set_content(f"הרצה מספר {run_id} הסתיימה בהצלחה.")
+    msg["Subject"] = f"Sentibot Run {run_id} Success"
+    msg["From"] = EMAIL
+    msg["To"] = TO
+
+    with smtplib.SMTP_SSL("smtp.gmail.com", 465) as smtp:
+        smtp.login(EMAIL, PASS)
+        smtp.send_message(msg)
+
+    print(f"📧 נשלח מייל לאחר הרצה מספר {run_id}")
+except Exception as e:
+    print(f"❌ שגיאה בשליחת מייל: {e}")
