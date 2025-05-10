@@ -1,4 +1,7 @@
+import subprocess
+import time
 from flask import Flask, send_file
+import os
 
 app = Flask(__name__)
 
@@ -8,10 +11,19 @@ def home():
 
 @app.route("/download-log")
 def download_log():
-    try:
-        return send_file("learning_log.csv", as_attachment=True)
-    except Exception as e:
-        return f"Error: {e}", 500
+    file_path = os.path.join(os.path.dirname(__file__), "learning_log.csv")
+    if not os.path.exists(file_path):
+        return f"Error: File not found at {file_path}", 404
+    return send_file(file_path, as_attachment=True)
 
 if __name__ == "__main__":
+    print("🚀 מריץ את Sentibot (main.py)...")
+    try:
+        subprocess.run(["python", "main.py"], check=True)
+        print("✅ Sentibot הסתיים. מעלים את השרת...")
+    except subprocess.CalledProcessError as e:
+        print(f"❌ שגיאה בהרצת main.py: {e}")
+    
+    time.sleep(1)  # שיהיה זמן ל־CSV להיווצר
+
     app.run(debug=True, host="0.0.0.0", port=8000)
