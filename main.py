@@ -1,5 +1,5 @@
-# main.py
 import time
+import os
 from datetime import datetime
 import pandas as pd
 from sentiment_analyzer import analyze_sentiment
@@ -8,7 +8,6 @@ from investors_scraper import get_investors_news
 from reddit_scraper import get_reddit_posts
 from recommender import make_recommendation
 from alpaca_trade_api.rest import REST
-import os
 
 SYMBOLS = [
     "AAPL", "TSLA", "NVDA", "MSFT", "META",
@@ -24,10 +23,10 @@ source_weights = {
 ALPACA_API_KEY = os.getenv("ALPACA_API_KEY")
 ALPACA_SECRET_KEY = os.getenv("ALPACA_SECRET_KEY")
 ALPACA_BASE_URL = "https://paper-api.alpaca.markets"
-
 alpaca = REST(ALPACA_API_KEY, ALPACA_SECRET_KEY, base_url=ALPACA_BASE_URL)
 
-log_file = "learning_log.csv"
+# ודא שהקובץ נשמר ליד הקבצים
+log_file = os.path.join(os.path.dirname(__file__), "learning_log.csv")
 
 print("🚀 Sentibot v1.5 – מופעל ✅")
 
@@ -72,7 +71,6 @@ for symbol in SYMBOLS:
     print(f"📊 {symbol}: סנטימנט משוקלל סופי: {avg_sentiment:.3f}")
     print(f"📈 {symbol}: החלטה: {result['decision'].upper()}")
 
-    # שליפת מחיר נוכחי מ-Alpaca
     try:
         price = alpaca.get_latest_trade(symbol).price
     except Exception as e:
@@ -98,7 +96,6 @@ for symbol in SYMBOLS:
     all_logs.append(log_entry)
     time.sleep(1)
 
-# שמירת הקובץ
 df = pd.DataFrame(all_logs)
 if os.path.exists(log_file):
     df.to_csv(log_file, mode="a", header=False, index=False)
@@ -106,3 +103,5 @@ else:
     df.to_csv(log_file, index=False)
 
 print("✅ הסתיים בהצלחה.")
+print(f"📄 נוצר קובץ log: {log_file}")
+print("📂 קבצים בתיקייה:", os.listdir(os.path.dirname(__file__)))
