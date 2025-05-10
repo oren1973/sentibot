@@ -1,24 +1,21 @@
-# server.py – גרסה תקינה עבור sentibot-doc
-
 from flask import Flask, send_file
-import os
+import subprocess
 
 app = Flask(__name__)
 
 @app.route("/")
 def home():
-    return "<h1>Sentibot: תיעוד פעולות</h1><a href='/download-log'>📄 הורד את קובץ הלמידה</a>"
+    return "Sentibot עובד. עבור ל- /download-log כדי להוריד את הקובץ."
 
 @app.route("/download-log")
 def download_log():
-    log_path = "/tmp/learning_log.csv"
-    if os.path.exists(log_path):
-        return send_file(log_path, as_attachment=True)
-    else:
-        return "⚠️ הקובץ לא נמצא. ודא שהרצת את Sentibot לפחות פעם אחת.", 404
-
-# מריץ את Sentibot במצב תיעוד (לא חובה, אבל שומר על עדכניות)
-os.system("python main.py")
+    path = "/tmp/learning_log.csv"
+    try:
+        return send_file(path, as_attachment=True)
+    except FileNotFoundError:
+        return "קובץ הלוג לא נמצא", 404
 
 if __name__ == "__main__":
-    app.run(debug=True, host="0.0.0.0", port=8000)
+    print("🚀 מריץ את Sentibot (main.py)...")
+    subprocess.run(["python", "main.py"], check=False)
+    app.run(host="0.0.0.0", port=8000, debug=True)
