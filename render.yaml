@@ -1,0 +1,31 @@
+# Exported from Render on 2025-05-10T17:50:17Z
+services:
+- type: cron
+  name: sentibot-evening
+  runtime: python
+  repo: https://github.com/oren1973/sentibot
+  plan: starter
+  envVars:
+  - key: REDDIT_USER_AGENT
+    sync: false
+  - key: REDDIT_CLIENT_SECRET
+    sync: false
+  - key: REDDIT_CLIENT_ID
+    sync: false
+  - key: EMAIL_USER
+    sync: false
+  - key: EMAIL_RECEIVER
+    sync: false
+  - key: EMAIL_PASS
+    sync: false
+  - key: ALPACA_SECRET_KEY
+    sync: false
+  - key: ALPACA_PAPER_BASE_URL
+    sync: false
+  - key: ALPACA_API_KEY
+    sync: false
+  region: frankfurt
+  buildCommand: pip install -r requirements.txt
+  startCommand: python main.py
+  schedule: 30 20 * * 1-5
+version: "1"
