@@ -1,13 +1,16 @@
-# recommender.py
+# recommender.py – גרסת בדיקה להרצה יזומה
 
 def make_recommendation(avg_sentiment):
-    """מקבל סנטימנט ממוצע ומחזיר המלצת מסחר פשוטה"""
-    if avg_sentiment > 0.2:
-        decision = "BUY"
-    elif avg_sentiment < -0.2:
-        decision = "SELL"
+    """
+    גרסה ניסיונית: כל סנטימנט חיובי קטן יוביל ל־BUY,
+    כל שלילי קטן יוביל ל־SELL – כדי לוודא שהמסחר פועל.
+    """
+    if avg_sentiment > 0.01:
+        decision = "buy"
+    elif avg_sentiment < -0.01:
+        decision = "sell"
     else:
-        decision = "HOLD"
+        decision = "hold"
 
     return {
         "decision": decision,
