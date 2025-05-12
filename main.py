@@ -1,11 +1,10 @@
-# main.py – גרסה מתוקנת לשמירת log ושליחת פקודות לאלפאקה
-import time
+# main.py – Sentibot v2.0: מסחר רגשי יומי עם תיעוד ודיווח
 import os
+import time
 import smtplib
 import pandas as pd
 from datetime import datetime
 from email.message import EmailMessage
-
 from sentiment_analyzer import analyze_sentiment
 from yahoo_scraper import get_yahoo_news
 from investors_scraper import get_investors_news
@@ -15,11 +14,12 @@ from alpaca_trader import trade_stock
 
 SYMBOLS = ["AAPL", "TSLA", "NVDA", "MSFT", "META", "PFE", "XOM", "JPM", "DIS", "WMT"]
 
-print("🚀 Sentibot v1.5 – מופעל ✅")
+print("🚀 Sentibot v2.0 – מופעל ✅")
 
-# שמור את הקובץ בתקיית הבסיס – לא ב־/tmp
 log_path = "learning_log.csv"
+now = datetime.now().isoformat(timespec="seconds")
 
+# קריאת לוג קיים או יצירת חדש
 try:
     log_df = pd.read_csv(log_path)
     run_id = int(log_df["run_id"].max()) + 1
@@ -28,10 +28,10 @@ except:
     run_id = 1
 
 new_rows = []
-now = datetime.now().isoformat(timespec="seconds")
+summary_lines = [f"📊 סיכום הרצה #{run_id} – {now}", ""]
 
 for symbol in SYMBOLS:
-    print(f"🔍 מחשב סנטימנט עבור {symbol}...")
+    print(f"\n🔍 מנתח סנטימנט עבור {symbol}...")
 
     yahoo_articles = get_yahoo_news(symbol)
     investors_articles = get_investors_news(symbol)
@@ -39,39 +39,41 @@ for symbol in SYMBOLS:
     all_articles = yahoo_articles + investors_articles + reddit_posts
 
     if not all_articles:
-        print(f"⚠️ לא נמצאו כתבות או פוסטים עבור {symbol}")
+        print(f"⚠️ לא נמצאו כתבות עבור {symbol}")
         continue
 
     sentiments = [analyze_sentiment(text) for text in all_articles]
     avg_sentiment = sum(sentiments) / len(sentiments)
     result = make_recommendation(avg_sentiment)
+    decision = result["decision"].lower()
 
-    print(f"📊 {symbol}: סנטימנט משוקלל סופי: {avg_sentiment:.3f}")
-    print(f"📈 {symbol}: החלטה: {result['decision'].upper()}")
+    prev = ""
+    if symbol in log_df["symbol"].values:
+        prev_entries = log_df[log_df["symbol"] == symbol].sort_values("datetime")
+        if not prev_entries.empty:
+            prev = prev_entries.iloc[-1]["decision"]
 
-    prev = log_df[log_df["symbol"] == symbol].sort_values("datetime").iloc[-1]["decision"] if symbol in log_df["symbol"].values else ""
-    print(f"🔁 {symbol}: החלטה קודמת: {prev}, החלטה נוכחית: {result['decision']}")
+    print(f"📈 סנטימנט ממוצע: {avg_sentiment:.3f} → החלטה: {decision.upper()} (קודם: {prev})")
 
     new_rows.append({
         "run_id": run_id,
         "symbol": symbol,
         "datetime": now,
         "sentiment_avg": avg_sentiment,
-        "decision": result["decision"],
+        "decision": decision,
         "previous_decision": prev
     })
 
-    if result["decision"] in ["buy", "sell"] and result["decision"] != prev:
-        trade_stock(symbol, result["decision"])
+    if decision in ["buy", "sell"] and decision != str(prev).lower():
+        trade_stock(symbol, decision)
+        summary_lines.append(f"🔁 {symbol}: {decision.upper()} (סנטימנט: {avg_sentiment:.2f})")
 
     time.sleep(1)
 
+# עדכון CSV
 updated_log_df = pd.concat([log_df, pd.DataFrame(new_rows)], ignore_index=True)
 updated_log_df.to_csv(log_path, index=False)
-
-print(f"✅ הסתיים בהצלחה.")
-print(f"📄 נוצר קובץ log: {log_path}")
-print(f"📂 קבצים בתיקייה: {os.listdir('.')}")
+print(f"\n✅ נוצר הקובץ: {log_path}")
 
 # שליחת מייל
 EMAIL = os.getenv("EMAIL_USER")
@@ -80,15 +82,19 @@ TO = os.getenv("EMAIL_RECEIVER")
 
 try:
     msg = EmailMessage()
-    msg.set_content(f"הרצה מספר {run_id} הסתיימה בהצלחה.")
-    msg["Subject"] = f"Sentibot Run {run_id} Success"
+    summary_text = "\n".join(summary_lines) if len(summary_lines) > 1 else "לא בוצעו פעולות קנייה/מכירה בהרצה זו."
+    msg.set_content(summary_text)
+    msg["Subject"] = f"Sentibot • Run #{run_id} Summary"
     msg["From"] = EMAIL
     msg["To"] = TO
+
+    with open(log_path, "rb") as f:
+        msg.add_attachment(f.read(), maintype="text", subtype="csv", filename=log_path)
 
     with smtplib.SMTP_SSL("smtp.gmail.com", 465) as smtp:
         smtp.login(EMAIL, PASS)
         smtp.send_message(msg)
 
-    print(f"📧 נשלח מייל לאחר הרצה מספר {run_id}")
+    print("📧 נשלח מייל סיכום עם קובץ CSV")
 except Exception as e:
     print(f"❌ שגיאה בשליחת מייל: {e}")
