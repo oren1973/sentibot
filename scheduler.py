@@ -14,8 +14,7 @@ def run_main():
     except Exception as e:
         print(f"❌ Failed to run main.py: {e}")
 
-# להרצה כל דקה (לבדיקה)
-schedule.every(1).minutes.do(run_main)
+schedule.every().day.at("12:30").do(run_main)
 
 print("🕒 Sentibot Scheduler is running... Waiting for next scheduled task.")
 
