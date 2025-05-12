@@ -9,7 +9,7 @@ def run_main():
     subprocess.run(["python", "main.py"])
 
 # Schedule: every day at 17:00 Israel time (UTC+3)
-schedule.every().day.at("14:00").do(run_main)  # 14:00 UTC = 17:00 IST
+schedule.every(1).minutes.do(run_main)
 
 print("🕒 Scheduler started...")
 
