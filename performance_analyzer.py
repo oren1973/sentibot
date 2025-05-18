@@ -4,6 +4,8 @@ from datetime import datetime, timedelta
 from alpaca.data.historical import StockHistoricalDataClient
 from alpaca.data.requests import StockBarsRequest
 from alpaca.data.timeframe import TimeFrame
+import smtplib
+from email.message import EmailMessage
 
 # יצירת לקוח Alpaca
 client = StockHistoricalDataClient(
@@ -11,23 +13,26 @@ client = StockHistoricalDataClient(
     os.getenv("ALPACA_SECRET_KEY")
 )
 
-# קביעת פרמטרים
+# פרמטרים
 DAYS_FORWARD = 3
 SUCCESS_THRESHOLD = 0.5  # אחוז עלייה שנחשב הצלחה
 
+# נתיבים
+log_path = "/data/learning_log.csv"
+output_path = "/data/performance_results.csv"
+
 # קריאת לוג ההרצות
-log_path = "/mnt/data/learning_log.csv"
 log_df = pd.read_csv(log_path)
 log_df['datetime'] = pd.to_datetime(log_df['datetime'], errors='coerce')
 
-# סינון רק פעולות BUY
+# סינון פעולות BUY בלבד
 buy_df = log_df[log_df['decision'].str.lower() == 'buy'].copy()
 buy_df['result'] = None
 buy_df['buy_price'] = None
 buy_df['future_price'] = None
 buy_df['change_pct'] = None
 
-# פונקציה לשליפת שינוי מחיר
+# פונקציה לשליפת נתוני שוק
 def evaluate_trade(symbol, buy_time):
     start = buy_time.date()
     end = start + timedelta(days=DAYS_FORWARD + 1)
@@ -52,7 +57,7 @@ def evaluate_trade(symbol, buy_time):
     except:
         return None, None, None
 
-# הרצת הבדיקה על כל פעולת BUY
+# ניתוח כל פעולת BUY
 for idx, row in buy_df.iterrows():
     symbol = row['symbol']
     dt = row['datetime']
@@ -65,13 +70,41 @@ for idx, row in buy_df.iterrows():
     if change_pct is not None:
         buy_df.at[idx, 'result'] = 'success' if change_pct > SUCCESS_THRESHOLD else 'fail'
 
-# שמירת תוצאה
-output_path = "/mnt/data/performance_results.csv"
+# שמירה לקובץ
 buy_df.to_csv(output_path, index=False)
 
-# סיכום כולל
+# סיכום
 summary = buy_df['result'].value_counts(normalize=True) * 100
 avg_change = buy_df['change_pct'].mean()
-print("\n=== סיכום ביצועים ===")
-print(summary)
-print(f"\nממוצע שינוי באחוזים: {avg_change:.2f}%")
+
+summary_text = "\n=== סיכום ביצועי BUY ===\n"
+summary_text += summary.to_string()
+summary_text += f"\n\nממוצע שינוי באחוזים: {avg_change:.2f}%"
+
+print(summary_text)
+
+# שליחת מייל סיכום
+EMAIL = os.getenv("EMAIL_USER")
+PASS = os.getenv("EMAIL_PASS")
+TO = os.getenv("EMAIL_RECEIVER")
+
+if EMAIL and PASS and TO:
+    try:
+        msg = EmailMessage()
+        msg.set_content(summary_text)
+        msg["Subject"] = "Sentibot • ניתוח ביצועים"
+        msg["From"] = EMAIL
+        msg["To"] = TO
+
+        with open(output_path, "rb") as f:
+            msg.add_attachment(f.read(), maintype="text", subtype="csv", filename="performance_results.csv")
+
+        with smtplib.SMTP_SSL("smtp.gmail.com", 465) as smtp:
+            smtp.login(EMAIL, PASS)
+            smtp.send_message(msg)
+
+        print("📧 מייל סיכום נשלח עם הקובץ")
+    except Exception as e:
+        print(f"❌ שגיאה בשליחת מייל: {e}")
+else:
+    print("📭 פרטי מייל חסרים – מייל לא נשלח")
