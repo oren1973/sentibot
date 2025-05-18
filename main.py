@@ -1,4 +1,4 @@
-# main.py – Sentibot v3.0: סוחר רגשי עם Volume ותיעוד מלא
+# main.py – Sentibot v3.1: סוחר רגשי עם Volume, תיעוד מתקדם וסטטיסטיקות סנטימנט
 import os
 import time
 import smtplib
@@ -11,6 +11,7 @@ from reddit_scraper import get_reddit_posts
 from investors_scraper import get_investors_news
 from recommender import make_recommendation
 from alpaca_trader import trade_stock
+from collections import Counter
 
 # --- הגדרות ---
 SYMBOLS = ["AAPL", "TSLA", "NVDA", "MSFT", "META", "PFE", "XOM", "JPM", "DIS", "WMT"]
@@ -29,7 +30,8 @@ try:
     run_id = int(log_df["run_id"].max()) + 1
 except Exception as e:
     print(f"[INFO] יצירת קובץ חדש: {LOG_PATH}")
-    log_df = pd.DataFrame(columns=["run_id", "symbol", "datetime", "sentiment_avg", "decision", "previous_decision"])
+    log_df = pd.DataFrame(columns=["run_id", "symbol", "datetime", "sentiment_avg", "decision", "previous_decision",
+                                    "sentiment_std", "num_articles", "main_source"])
     run_id = 1
 
 new_rows = []
@@ -53,6 +55,13 @@ for symbol in SYMBOLS:
 
     sentiments = [analyze_sentiment(text) for text in all_articles]
     avg_sentiment = sum(sentiments) / len(sentiments)
+    sentiment_std = pd.Series(sentiments).std()
+    num_articles = len(all_articles)
+
+    # זיהוי מקור דומיננטי
+    sources = ["Yahoo"] * len(yahoo) + ["Investors"] * len(investors) + ["Reddit"] * len(reddit)
+    main_source = Counter(sources).most_common(1)[0][0] if sources else "unknown"
+
     result = make_recommendation(avg_sentiment)
     decision = result["decision"].lower()
 
@@ -70,7 +79,10 @@ for symbol in SYMBOLS:
         "datetime": NOW,
         "sentiment_avg": avg_sentiment,
         "decision": decision,
-        "previous_decision": prev
+        "previous_decision": prev,
+        "sentiment_std": sentiment_std,
+        "num_articles": num_articles,
+        "main_source": main_source
     })
 
     if decision in ["buy", "sell"] and decision != str(prev).lower():
