@@ -8,19 +8,23 @@ def fetch_news_titles(symbol):
         if not source_info.get("enabled", False):
             continue
 
-        rss_url = source_info["rss"].replace("{symbol}", symbol)
+        rss_url = source_info.get("rss")
+        if not rss_url:
+            print(f"⚠️ מקור {source_name} אינו מכיל URL של RSS – מדלג.")
+            continue
+
+        rss_url = rss_url.replace("{symbol}", symbol)
         feed = feedparser.parse(rss_url)
 
         if feed.bozo:
             print(f"⚠️ שגיאה בהבאת מידע מ־{source_name} עבור {symbol}: {feed.bozo_exception}")
             continue
 
-        for entry in feed.entries[:5]:  # הגבלת כמות לכותרות רלוונטיות
+        for entry in feed.entries[:5]:
             title = entry.get("title", "").strip()
             if title:
                 headlines.append((title, source_name))
 
-    # הדפסה לצורך איתור באג
     if headlines:
         print(f"\n🔎 {symbol} – Headlines:")
         for h in headlines:
