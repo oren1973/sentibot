@@ -1,4 +1,4 @@
-# main.py – Sentibot with Smart Universe & Email Report May 31, 2025 5:21PM
+# main.py – Sentibot with Smart Universe & Email Report (עדכון מייל) – May 31, 2025
 import os
 import pandas as pd
 from datetime import datetime, date
@@ -7,6 +7,7 @@ from news_scraper import fetch_news_titles
 from smart_universe import get_smart_universe
 from recommender import make_recommendation
 from alpaca_trader import trade_stock
+from email_sender import send_run_success_email  # ← מוסף
 
 # הגדרות בסיסיות
 DATE_STR = date.today().isoformat()
@@ -15,7 +16,6 @@ LOG_PATH = "learning_log.csv"
 
 def main():
     symbols = get_smart_universe()
-
     log_rows = []
 
     for symbol in symbols:
@@ -53,6 +53,7 @@ def main():
         else:
             df.to_csv(LOG_PATH, index=False)
 
+        send_run_success_email(run_id=DATE_STR)  # ← קריאה למייל לאחר הצלחה
+
 if __name__ == "__main__":
     main()
-
