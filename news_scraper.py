@@ -1,37 +1,31 @@
-# news_scraper.py – גרסה מעודכנת לשלב 2
-
+# news_scraper.py – גרסה מעודכנת לשימוש בשמות חברות
 import feedparser
 from config import NEWS_SOURCES
 from urllib.parse import quote
+from symbol_names import SYMBOL_TO_NAME
 
 def fetch_news_titles(symbol):
     headlines = []
-    
+
+    # נשתמש בשם החברה לצורך החיפוש, אם קיים
+    search_term = SYMBOL_TO_NAME.get(symbol, symbol)
+    search_term_encoded = quote(search_term)
+
     for source_name, source in NEWS_SOURCES.items():
-        # דילוג על מקורות לא פעילים
         if not source.get("enabled", True):
             continue
 
-        source_type = source.get("type")
-        url = source.get("url")
+        url_template = source.get("rss")
+        if not url_template:
+            continue
 
-        # מקור מסוג "news_article": RSS קבוע לכל השוק, נסנן לפי הופעת הסימבול בכותרת
-        if source_type == "news_article" and url:
-            feed = feedparser.parse(url)
-            for entry in feed.entries:
-                title = entry.title.strip()
-                if title and symbol.upper() in title.upper():
-                    headlines.append((title, source_name))
+        # נחליף {symbol} בשם החברה (מוצפן ב-URL)
+        rss_url = url_template.format(symbol=search_term_encoded)
+        feed = feedparser.parse(rss_url)
 
-        # תמיכה עתידית בסוגים אחרים (כמו "symbol_rss")
-        # elif source_type == "symbol_rss" and url:
-        #     formatted_url = url.format(symbol=quote(symbol))
-        #     feed = feedparser.parse(formatted_url)
-        #     for entry in feed.entries:
-        #         title = entry.title.strip()
-        #         if title:
-        #             headlines.append((title, source_name))
-
-        # מקורות מסוג Reddit יטופלו בקובץ reddit_scraper.py
+        for entry in feed.entries:
+            title = entry.title.strip()
+            if title:
+                headlines.append((title, source_name))
 
     return headlines
