@@ -1,4 +1,4 @@
-# main.py – Sentibot with Smart Universe & Email Report (עדכון מייל) – May 31, 2025
+# main.py – Sentibot with Smart Universe & Email Report (with attachment)
 import os
 import pandas as pd
 from datetime import datetime, date
@@ -7,12 +7,13 @@ from news_scraper import fetch_news_titles
 from smart_universe import get_smart_universe
 from recommender import make_recommendation
 from alpaca_trader import trade_stock
-from email_sender import send_run_success_email  # ← מוסף
+from email_sender import send_run_success_email  # ✅ ייבוא הפונקציה
 
 # הגדרות בסיסיות
 DATE_STR = date.today().isoformat()
 NOW = datetime.now().isoformat()
-LOG_PATH = "learning_log.csv"
+RUN_ID = NOW[:19].replace(":", "-")
+LOG_PATH = f"learning_log_{DATE_STR}.csv"
 
 def main():
     symbols = get_smart_universe()
@@ -48,12 +49,10 @@ def main():
 
     if log_rows:
         df = pd.DataFrame(log_rows)
-        if os.path.exists(LOG_PATH):
-            df.to_csv(LOG_PATH, mode='a', header=False, index=False)
-        else:
-            df.to_csv(LOG_PATH, index=False)
-
-        send_run_success_email(run_id=DATE_STR)  # ← קריאה למייל לאחר הצלחה
+        df.to_csv(LOG_PATH, index=False)
+        send_run_success_email(RUN_ID, LOG_PATH)  # ✅ שליחת מייל עם קובץ
+    else:
+        print("⚠️ No data to log or send.")
 
 if __name__ == "__main__":
     main()
