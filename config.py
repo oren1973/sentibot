@@ -1,18 +1,19 @@
-# config.py – הרצת Debug ממוקדת ל־10 מניות נבחרות
+# config.py – מעודכן לשלב 2
 
-# סימבולים לבדיקה ממוקדת (Debug mode)
-SYMBOLS = ["AAPL", "TSLA", "NVDA", "MSFT", "META", "PFE", "XOM", "JPM", "DIS", "WMT"]
-
-# רמת בטחון מינימלית להמלצה
-TRADE_THRESHOLD = 0.4
-
-# משקלי מקורות לניתוח סנטימנט
-SOURCE_WEIGHTS = {
-    'Bloomberg': 1.3,
-    'CNBC': 1.2,
-    'Yahoo Finance': 1.0,
-    'Unknown': 0.8
+NEWS_SOURCES = {
+    "Reuters": {
+        "url": "https://feeds.reuters.com/reuters/businessNews",
+        "type": "news_article",
+        "weight": 1.2
+    },
+    "CNBC": {
+        "url": "https://www.cnbc.com/id/100003114/device/rss/rss.html",
+        "type": "news_article",
+        "weight": 1.0
+    },
+    "Reddit": {
+        "subreddits": ["wallstreetbets", "stocks", "investing", "options"],
+        "type": "user_post",
+        "weight": 0.8
+    }
 }
-
-# קבוע דעיכה אקספוננציאלי לפי זמן (בשעות)
-LAMBDA_DECAY = 0.1
