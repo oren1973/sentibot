@@ -20,3 +20,6 @@ SYMBOLS_SMART = [
     # מניות טכנולוגיה גדולות עם סנטימנט ברור
     "AAPL", "META", "SNAP"
 ]
+
+def get_smart_universe():
+    return SYMBOLS_SMART
