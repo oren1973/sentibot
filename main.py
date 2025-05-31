@@ -1,4 +1,4 @@
-# main.py – Sentibot with Smart Universe & Email Report (with attachment)
+# main.py – Sentibot with Smart Universe & Email Report – Updated May 31
 import os
 import pandas as pd
 from datetime import datetime, date
@@ -7,15 +7,19 @@ from news_scraper import fetch_news_titles
 from smart_universe import get_smart_universe
 from recommender import make_recommendation
 from alpaca_trader import trade_stock
-from email_sender import send_run_success_email  # ✅ ייבוא הפונקציה
+from email_sender import send_run_success_email
 
 # הגדרות בסיסיות
 DATE_STR = date.today().isoformat()
 NOW = datetime.now().isoformat()
-RUN_ID = NOW[:19].replace(":", "-")
-LOG_PATH = f"learning_log_{DATE_STR}.csv"
+LOG_DIR = "logs"
+LOG_FILENAME = f"learning_log_{DATE_STR}.csv"
+LOG_PATH = os.path.join(LOG_DIR, LOG_FILENAME)
 
 def main():
+    if not os.path.exists(LOG_DIR):
+        os.makedirs(LOG_DIR)
+
     symbols = get_smart_universe()
     log_rows = []
 
@@ -42,17 +46,25 @@ def main():
             "timestamp": NOW,
             "symbol": symbol,
             "avg_sentiment": avg_score,
-            "recommendation": recommendation,
+            "recommendation": recommendation["decision"],
+            "score_used": recommendation["score"],
             "trade_result": trade_result,
             "headlines": "; ".join(f"{s} [{src}]" for s, src, _ in sentiments)
         })
 
     if log_rows:
         df = pd.DataFrame(log_rows)
-        df.to_csv(LOG_PATH, index=False)
-        send_run_success_email(RUN_ID, LOG_PATH)  # ✅ שליחת מייל עם קובץ
+        if os.path.exists(LOG_PATH):
+            df.to_csv(LOG_PATH, mode='a', header=False, index=False)
+        else:
+            df.to_csv(LOG_PATH, index=False)
+        print(f"\n📁 Log saved to {LOG_PATH}")
     else:
-        print("⚠️ No data to log or send.")
+        print("⚠️ No data to log.")
+
+    # שליחת מייל כולל קובץ תוצרים
+    run_id = NOW.replace(":", "-").replace("T", "_").split(".")[0]
+    send_run_success_email(run_id, LOG_PATH if log_rows else None)
 
 if __name__ == "__main__":
     main()
