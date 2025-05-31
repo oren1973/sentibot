@@ -6,8 +6,12 @@ NEWS_SOURCES = {
         "rss": "https://feeds.finance.yahoo.com/rss/2.0/headline?s={symbol}&region=US&lang=en-US"
     },
     "Investors": {
-        "enabled": True,
+        "enabled": False,  # נוטרל זמנית עקב שגיאות חוזרות
         "rss": "https://www.investors.com/rss/stock-{symbol}.xml"
+    },
+    "CNBC": {
+        "enabled": False,  # לשלב הבא – דרוש מיפוי סמלים
+        "rss": "https://www.cnbc.com/id/100003114/device/rss/rss.html"
     }
 }
 
