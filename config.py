@@ -1,32 +1,23 @@
+# config.py – הגדרות כלליות של Sentibot
+
 NEWS_SOURCES = {
-    "CNBC": {
-        "rss": "https://www.cnbc.com/id/100003114/device/rss/rss.html?query={symbol}",
-        "type": "news_article",
-        "weight": 1.0,
+    "Yahoo": {
         "enabled": True,
-    },
-    "Reuters": {
-        "rss": "https://www.reuters.com/site-search/?query={symbol}&sort=relevance&offset=0",
-        "type": "news_article",
-        "weight": 1.2,
-        "enabled": True,
+        "rss": "https://feeds.finance.yahoo.com/rss/2.0/headline?s={symbol}&region=US&lang=en-US"
     },
     "Investors": {
-        "rss": "https://www.investors.com/feed/?s={symbol}",
-        "type": "news_article",
-        "weight": 1.1,
         "enabled": True,
-    },
-    "Reddit": {
-        "subreddits": ["wallstreetbets", "stocks", "investing", "options"],
-        "type": "user_post",
-        "weight": 0.8,
-        "enabled": True,
-    },
-    "GeneralReuters": {
-        "url": "https://feeds.reuters.com/reuters/businessNews",
-        "type": "general_market",
-        "weight": 1.0,
-        "enabled": False,  # להפעיל בשלב מאוחר יותר
+        "rss": "https://www.investors.com/rss/stock-{symbol}.xml"
     }
 }
+
+# שאר הגדרות המייל וכו'
+import os
+
+EMAIL_USER = os.getenv("EMAIL_USER")
+EMAIL_PASS = os.getenv("EMAIL_PASS")
+EMAIL_RECEIVER = os.getenv("EMAIL_RECEIVER")
+
+# שימוש בקובץ חדש לפי תאריך
+from datetime import date
+LOG_NAME = f"learning_log_{date.today().isoformat()}.csv"
