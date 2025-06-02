@@ -1,4 +1,3 @@
-from vaderSentiment.vaderSentiment import SentimentIntensityAnalyzer
 from config import NEWS_SOURCES
 
 analyzer = SentimentIntensityAnalyzer()
