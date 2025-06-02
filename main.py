@@ -1,4 +1,4 @@
-# main.py – Sentibot עם בדיקת חוזרנות כותרות – גרסה 2025-05-31
+# main.py – Sentibot עם לוג מתמשך בלבד
 import os
 import pandas as pd
 from datetime import datetime, date
@@ -9,12 +9,10 @@ from recommender import make_recommendation
 from alpaca_trader import trade_stock
 from email_sender import send_run_success_email
 
-# הגדרות בסיסיות
-DATE_STR = date.today().isoformat()
+# הגדרות בסיסיות – לוג מצטבר
 NOW = datetime.now().isoformat()
 LOG_DIR = "logs"
-LOG_FILENAME = f"learning_log_{DATE_STR}.csv"
-LOG_PATH = os.path.join(LOG_DIR, LOG_FILENAME)
+LOG_PATH = os.path.join(LOG_DIR, "learning_log_full.csv")
 
 def main():
     if not os.path.exists(LOG_DIR):
@@ -46,8 +44,6 @@ def main():
 
         avg_score = round(sum(scores_only) / len(scores_only), 3)
         recommendation = make_recommendation(avg_score)
-
-        print(f"🧠 Sentiment for {symbol}: {avg_score} → {recommendation}")
         trade_result = trade_stock(symbol, recommendation)
 
         log_rows.append({
@@ -62,15 +58,11 @@ def main():
 
     if log_rows:
         df = pd.DataFrame(log_rows)
-        if os.path.exists(LOG_PATH):
-            df.to_csv(LOG_PATH, mode='a', header=False, index=False)
-        else:
-            df.to_csv(LOG_PATH, index=False)
-        print(f"\n📁 Log saved to {LOG_PATH}")
+        df.to_csv(LOG_PATH, mode='a', header=not os.path.exists(LOG_PATH), index=False)
+        print(f"\n📁 Log appended to {LOG_PATH}")
     else:
         print("⚠️ No data to log.")
 
-    # שליחת מייל כולל קובץ תוצרים
     run_id = NOW.replace(":", "-").replace("T", "_").split(".")[0]
     send_run_success_email(run_id, LOG_PATH if log_rows else None)
 
