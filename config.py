@@ -1,27 +1,55 @@
-# config.py – הגדרות כלליות של Sentibot
+import feedparser
+from config import NEWS_SOURCES
+from cnbc_scraper import get_cnbc_titles  # ודא שהקובץ קיים
 
-NEWS_SOURCES = {
-    "Yahoo": {
-        "enabled": True,
-        "rss": "https://feeds.finance.yahoo.com/rss/2.0/headline?s={symbol}&region=US&lang=en-US"
-    },
-    "Investors": {
-        "enabled": False,  # נוטרל זמנית עקב שגיאות חוזרות
-        "rss": "https://www.investors.com/rss/stock-{symbol}.xml"
-    },
-    "CNBC": {
-        "enabled": False,  # לשלב הבא – דרוש מיפוי סמלים
-        "rss": "https://www.cnbc.com/id/100003114/device/rss/rss.html"
-    }
-}
+def fetch_news_titles(symbol):
+    headlines = []
+    seen_titles = set()
 
-# שאר הגדרות המייל וכו'
-import os
+    for source_name, source_info in NEWS_SOURCES.items():
+        if not source_info.get("enabled", False):
+            continue
 
-EMAIL_USER = os.getenv("EMAIL_USER")
-EMAIL_PASS = os.getenv("EMAIL_PASS")
-EMAIL_RECEIVER = os.getenv("EMAIL_RECEIVER")
+        # מקור ייחודי – CNBC
+        if source_name == "CNBC":
+            try:
+                cnbc_titles = get_cnbc_titles(symbol)
+                for title, src in cnbc_titles:
+                    if len(title) >= 10 and title not in seen_titles:
+                        headlines.append((title, src))
+                        seen_titles.add(title)
+            except Exception as e:
+                print(f"⚠️ כשלון ב־CNBC scrape ל־{symbol}: {e}")
+            continue
 
-# שימוש בקובץ חדש לפי תאריך
-from datetime import date
-LOG_NAME = f"learning_log_{date.today().isoformat()}.csv"
+        # שאר המקורות (למשל Yahoo)
+        rss_url = source_info.get("rss")
+        if not rss_url:
+            print(f"⚠️ מקור {source_name} אינו מכיל RSS – מדלג.")
+            continue
+
+        try:
+            rss_url = rss_url.replace("{symbol}", symbol)
+            feed = feedparser.parse(rss_url)
+
+            if feed.bozo:
+                print(f"⚠️ שגיאה מ־{source_name} עבור {symbol}: {feed.bozo_exception}")
+                continue
+
+            for entry in feed.entries[:10]:  # ⬅️ עד 10 כותרות
+                title = entry.get("title", "").strip()
+                if len(title) >= 10 and title not in seen_titles:
+                    headlines.append((title, source_name))
+                    seen_titles.add(title)
+
+        except Exception as e:
+            print(f"⚠️ חריגה מ־{source_name} עבור {symbol}: {e}")
+
+    if headlines:
+        print(f"\n🔎 {symbol} – Headlines:")
+        for h in headlines:
+            print(f"- {h[0]} [{h[1]}]")
+    else:
+        print(f"\n🔎 {symbol} – No headlines found.")
+
+    return headlines
