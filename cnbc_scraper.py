@@ -1,32 +1,24 @@
-import requests
-from bs4 import BeautifulSoup
-from urllib.parse import quote
-from sentiment import clean_text
+import feedparser
 
-def fetch_cnbc_titles(symbol):
-    base_url = f"https://www.cnbc.com/search/?query={quote(symbol)}"
-    headers = {
-        "User-Agent": (
-            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
-            "AppleWebKit/537.36 (KHTML, like Gecko) "
-            "Chrome/113.0.0.0 Safari/537.36"
-        )
-    }
+CNBC_RSS_URL = "https://www.cnbc.com/id/100003114/device/rss/rss.html"
+
+def get_cnbc_titles(symbol):
+    symbol = symbol.upper()
+    headlines = []
 
     try:
-        response = requests.get(base_url, headers=headers, timeout=10)
-        response.raise_for_status()
-    except requests.RequestException as e:
-        print(f"⚠️ שגיאה בשליפת חדשות CNBC עבור {symbol}: {e}")
-        return []
+        feed = feedparser.parse(CNBC_RSS_URL)
 
-    soup = BeautifulSoup(response.text, "html.parser")
-    articles = soup.find_all("a", class_="SearchResultCard-headline")
+        if feed.bozo:
+            print(f"⚠️ שגיאה ב־CNBC RSS: {feed.bozo_exception}")
+            return []
 
-    titles = []
-    for article in articles:
-        title = article.get_text(strip=True)
-        cleaned = clean_text(title)
-        titles.append((cleaned, "[CNBC]"))
+        for entry in feed.entries[:20]:
+            title = entry.get("title", "").strip()
+            if symbol in title:
+                headlines.append((title, "CNBC"))
 
-    return titles
+    except Exception as e:
+        print(f"⚠️ שגיאה ב־get_cnbc_titles({symbol}): {e}")
+
+    return headlines
