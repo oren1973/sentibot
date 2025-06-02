@@ -1,4 +1,4 @@
-from config import NEWS_SOURCES
+from settings import NEWS_SOURCES
 
 analyzer = SentimentIntensityAnalyzer()
 
