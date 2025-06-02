@@ -1,5 +1,6 @@
 import feedparser
 from config import NEWS_SOURCES
+from cnbc_scraper import get_cnbc_titles  # חדש
 
 def fetch_news_titles(symbol):
     headlines = []
@@ -9,6 +10,19 @@ def fetch_news_titles(symbol):
         if not source_info.get("enabled", False):
             continue
 
+        # CNBC – מקור ייחודי עם סינון כותרות לפי סימבול
+        if source_name == "CNBC":
+            try:
+                cnbc_titles = get_cnbc_titles(symbol)
+                for title, src in cnbc_titles:
+                    if len(title) >= 10 and title not in seen_titles:
+                        headlines.append((title, src))
+                        seen_titles.add(title)
+            except Exception as e:
+                print(f"⚠️ כשלון ב־CNBC scrape ל־{symbol}: {e}")
+            continue
+
+        # שאר המקורות (למשל Yahoo, Investors)
         rss_url = source_info.get("rss")
         if not rss_url:
             print(f"⚠️ מקור {source_name} אינו מכיל URL של RSS – מדלג.")
