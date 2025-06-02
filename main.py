@@ -1,4 +1,4 @@
-# main.py – Sentibot with Smart Universe & Email Report – Updated May 31
+# main.py – Sentibot עם בדיקת חוזרנות כותרות – גרסה 2025-05-31
 import os
 import pandas as pd
 from datetime import datetime, date
@@ -27,16 +27,24 @@ def main():
         print(f"\n🔍 Processing {symbol}")
         all_titles = fetch_news_titles(symbol)
 
+        if not all_titles:
+            print(f"⚠️ No headlines to analyze for {symbol}")
+            continue
+
         sentiments = []
         for title, source in all_titles:
             score = analyze_sentiment(title, source)
             sentiments.append((title, source, score))
 
         if not sentiments:
-            print(f"No headlines found for {symbol}")
+            print(f"⚠️ No valid sentiments found for {symbol}")
             continue
 
-        avg_score = round(sum(score for _, _, score in sentiments) / len(sentiments), 3)
+        scores_only = [s for _, _, s in sentiments]
+        if len(set(scores_only)) == 1:
+            print(f"⚠️ All sentiment scores identical ({scores_only[0]}) for {symbol}")
+
+        avg_score = round(sum(scores_only) / len(scores_only), 3)
         recommendation = make_recommendation(avg_score)
 
         print(f"🧠 Sentiment for {symbol}: {avg_score} → {recommendation}")
