@@ -2,7 +2,7 @@
 import praw
 import os
 # from datetime import datetime, timedelta # לא בשימוש כרגע במודול זה
-from logger_config import setup_logger
+from settings import setup_logger
 
 logger = setup_logger(__name__)
 
