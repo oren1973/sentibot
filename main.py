@@ -1,91 +1,60 @@
-# main.py – Sentibot עם לוג מתמשך ושליחת קובץ כותרות
 import os
+import time
+import smtplib
 import pandas as pd
 from datetime import datetime, date
+from email.message import EmailMessage
 from sentiment_analyzer import analyze_sentiment
 from news_scraper import fetch_news_titles
-from smart_universe import get_smart_universe
+from investors_scraper import get_investors_news
 from recommender import make_recommendation
 from alpaca_trader import trade_stock
-from email_sender import send_run_success_email
+from send_email import send_run_success_email
 
-# הגדרות בסיסיות – לוג מצטבר
+# --- הגדרות ---
+SYMBOLS = ["AAPL", "TSLA", "NVDA", "MSFT", "META", "PFE", "XOM", "JPM", "DIS", "WMT"]
+LOG_PATH = "learning_log_full.csv"
+DATE_STR = date.today().isoformat()
 NOW = datetime.now().isoformat()
-LOG_DIR = "logs"
-LOG_PATH = os.path.join(LOG_DIR, "learning_log_full.csv")
-TITLES_PATH = "diagnostic_titles.csv"
+RUN_ID = int(datetime.now().timestamp())  # מזהה ריצה ייחודי
 
-def main():
-    if not os.path.exists(LOG_DIR):
-        os.makedirs(LOG_DIR)
+# --- איסוף מידע וביצוע מסחר ---
+run_log = []
 
-    symbols = get_smart_universe()
-    log_rows = []
-    title_rows = []
+for symbol in SYMBOLS:
+    try:
+        yahoo_titles = fetch_news_titles(symbol)
+        investors_titles = get_investors_news(symbol)
+        all_titles = yahoo_titles + investors_titles
+        top_titles = sorted(all_titles, key=lambda x: x["weight"], reverse=True)[:10]
 
-    for symbol in symbols:
-        print(f"\n🔍 Processing {symbol}")
-        all_titles = fetch_news_titles(symbol)
-
-        if not all_titles:
-            print(f"⚠️ No headlines to analyze for {symbol}")
-            continue
-
-        sentiments = []
-        for title, source in all_titles:
-            score = analyze_sentiment(title, source)
-            sentiments.append((title, source, score))
-
-        if not sentiments:
-            print(f"⚠️ No valid sentiments found for {symbol}")
-            continue
-
-        scores_only = [s for _, _, s in sentiments]
-        if len(set(scores_only)) == 1:
-            print(f"⚠️ All sentiment scores identical ({scores_only[0]}) for {symbol}")
-
-        avg_score = round(sum(scores_only) / len(scores_only), 3)
-        recommendation = make_recommendation(avg_score)
+        sentiment_score = analyze_sentiment(top_titles)
+        recommendation = make_recommendation(symbol, sentiment_score)
         trade_result = trade_stock(symbol, recommendation)
 
-        log_rows.append({
-            "timestamp": NOW,
+        run_log.append({
             "symbol": symbol,
-            "avg_sentiment": avg_score,
-            "recommendation": recommendation["decision"],
-            "score_used": recommendation["score"],
+            "datetime": NOW,
+            "sentiment": sentiment_score,
+            "recommendation": recommendation,
             "trade_result": trade_result,
-            "headlines": "; ".join(f"{s} [{src}]" for s, src, _ in sentiments)
+            "source_count": len(all_titles),
         })
 
-        for title, source, score in sentiments:
-            title_rows.append({
-                "timestamp": NOW,
-                "symbol": symbol,
-                "source": source,
-                "title": title,
-                "score": score
-            })
+    except Exception as e:
+        print(f"⚠️ שגיאה בטיפול ב־{symbol}: {e}")
 
-    # שמירת קובץ לוג עיקרי
-    if log_rows:
-        df = pd.DataFrame(log_rows)
-        df.to_csv(LOG_PATH, mode='a', header=not os.path.exists(LOG_PATH), index=False)
-        print(f"\n📁 Log appended to {LOG_PATH}")
-    else:
-        print("⚠️ No data to log.")
+# --- שמירת לוג מצטבר כולל run_id ---
+log_df = pd.DataFrame(run_log)
+log_df.insert(0, "run_id", RUN_ID)
 
-    # שמירת קובץ כותרות לדיאגנוסטיקה
-    if title_rows:
-        titles_df = pd.DataFrame(title_rows)
-        titles_df.to_csv(TITLES_PATH, index=False)
-        print(f"📝 Titles saved to {TITLES_PATH}")
-    else:
-        print("⚠️ No titles to save.")
+if os.path.exists(LOG_PATH):
+    existing_df = pd.read_csv(LOG_PATH)
+    updated_df = pd.concat([existing_df, log_df], ignore_index=True)
+else:
+    updated_df = log_df
 
-    run_id = NOW.replace(":", "-").replace("T", "_").split(".")[0]
-    send_run_success_email(run_id, LOG_PATH if log_rows else None)
-    send_run_success_email("diagnostic_titles", TITLES_PATH if title_rows else None)
+updated_df.to_csv(LOG_PATH, index=False)
 
-if __name__ == "__main__":
-    main()
+# --- שליחת מייל ---
+send_run_success_email(RUN_ID, attachment_path=LOG_PATH)
