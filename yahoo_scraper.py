@@ -1,6 +1,6 @@
 # yahoo_scraper.py
 import feedparser
-from logger_config import setup_logger
+from settings import setup_logger
 
 logger = setup_logger(__name__)
 
