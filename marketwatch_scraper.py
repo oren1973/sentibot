@@ -3,7 +3,7 @@ import requests
 from bs4 import BeautifulSoup
 # from urllib.parse import quote # לא בשימוש כרגע
 # from sentiment import clean_text # הנחה שזו פונקציה שלך. אם לא, צריך להגדיר אותה או להסיר.
-from logger_config import setup_logger
+from settings import setup_logger
 
 logger = setup_logger(__name__)
 
