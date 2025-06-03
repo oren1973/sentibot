@@ -1,6 +1,6 @@
 # investors_scraper.py
 import feedparser
-from logger_config import setup_logger # ייבוא פונקציית הלוגר
+from settings import setup_logger
 
 logger = setup_logger(__name__) # אתחול לוגר ספציפי למודול זה
 
