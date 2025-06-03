@@ -1,60 +1,60 @@
-import os
-import time
-import smtplib
-import pandas as pd
-from datetime import datetime, date
-from email.message import EmailMessage
+import datetime
+from config import SYMBOLS, MAX_TITLES_PER_SOURCE
+from news_scraper import get_yahoo_news, get_investors_news, get_cnbc_news
 from sentiment_analyzer import analyze_sentiment
-from news_scraper import fetch_news_titles
-from investors_scraper import get_investors_news
-from recommender import make_recommendation
-from alpaca_trader import trade_stock
-from email_sender import send_run_success_email
+from recommender import get_recommendation
+from alpaca_trader import execute_trade
+from mailer import send_run_success_email
+from performance_analyzer import update_learning_log, summarize_performance
+import pandas as pd
+import os
 
-# --- הגדרות ---
-SYMBOLS = ["AAPL", "TSLA", "NVDA", "MSFT", "META", "PFE", "XOM", "JPM", "DIS", "WMT"]
-LOG_PATH = "learning_log_full.csv"
-DATE_STR = date.today().isoformat()
-NOW = datetime.now().isoformat()
-RUN_ID = int(datetime.now().timestamp())  # מזהה ריצה ייחודי
+def main():
+    run_id = datetime.datetime.now().strftime("%Y%m%d%H%M%S")
+    print(f"\n🚀 Starting Sentibot run {run_id}")
+    run_data = []
 
-# --- איסוף מידע וביצוע מסחר ---
-run_log = []
+    for symbol in SYMBOLS:
+        print(f"\n🔍 Processing {symbol}")
+        try:
+            yahoo_titles = get_yahoo_news(symbol)[:MAX_TITLES_PER_SOURCE]
+            investors_titles = get_investors_news(symbol)[:MAX_TITLES_PER_SOURCE]
+            cnbc_titles = get_cnbc_news(symbol)[:MAX_TITLES_PER_SOURCE]
 
-for symbol in SYMBOLS:
-    try:
-        yahoo_titles = fetch_news_titles(symbol)
-        investors_titles = get_investors_news(symbol)
-        all_titles = yahoo_titles + investors_titles
-        top_titles = sorted(all_titles, key=lambda x: x["weight"], reverse=True)[:10]
+            all_titles = yahoo_titles + investors_titles + cnbc_titles
+            print(f"📰 Total titles for {symbol}: {len(all_titles)}")
 
-        sentiment_score = analyze_sentiment(top_titles)
-        recommendation = make_recommendation(symbol, sentiment_score)
-        trade_result = trade_stock(symbol, recommendation)
+            if not all_titles:
+                print(f"⚠️ No titles found for {symbol}. Skipping.")
+                continue
 
-        run_log.append({
-            "symbol": symbol,
-            "datetime": NOW,
-            "sentiment": sentiment_score,
-            "recommendation": recommendation,
-            "trade_result": trade_result,
-            "source_count": len(all_titles),
-        })
+            sentiment = analyze_sentiment(all_titles, symbol)
+            action = get_recommendation(sentiment)
+            trade_result = execute_trade(symbol, action)
 
-    except Exception as e:
-        print(f"⚠️ שגיאה בטיפול ב־{symbol}: {e}")
+            record = {
+                "symbol": symbol,
+                "sentiment": sentiment,
+                "action": action,
+                "trade_result": trade_result,
+                "run_id": run_id,
+                "timestamp": datetime.datetime.now()
+            }
+            run_data.append(record)
 
-# --- שמירת לוג מצטבר כולל run_id ---
-log_df = pd.DataFrame(run_log)
-log_df.insert(0, "run_id", RUN_ID)
+        except Exception as e:
+            print(f"❌ Error processing {symbol}: {e}")
 
-if os.path.exists(LOG_PATH):
-    existing_df = pd.read_csv(LOG_PATH)
-    updated_df = pd.concat([existing_df, log_df], ignore_index=True)
-else:
-    updated_df = log_df
+    if run_data:
+        df = pd.DataFrame(run_data)
+        output_path = f"learning_log_full.csv"
+        df.to_csv(output_path, mode="a", index=False, header=not os.path.exists(output_path))
+        print(f"💾 Results saved to {output_path}")
+        update_learning_log(output_path)
+        summarize_performance(output_path)
+        send_run_success_email(run_id, output_path)
+    else:
+        print("⚠️ No data to save. Skipping file creation and email.")
 
-updated_df.to_csv(LOG_PATH, index=False)
-
-# --- שליחת מייל ---
-send_run_success_email(RUN_ID, attachment_path=LOG_PATH)
+if __name__ == "__main__":
+    main()
