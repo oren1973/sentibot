@@ -1,60 +1,76 @@
-import datetime
-from config import SYMBOLS, MAX_TITLES_PER_SOURCE
-from news_scraper import get_yahoo_news, get_investors_news, get_cnbc_news
-from sentiment_analyzer import analyze_sentiment
-from recommender import get_recommendation
-from alpaca_trader import execute_trade
-from mailer import send_run_success_email
-from performance_analyzer import update_learning_log, summarize_performance
-import pandas as pd
 import os
+import sys
+import pandas as pd
+from datetime import datetime
+from news_scraper import fetch_news_titles
+from sentiment_analyzer import analyze_sentiment
+from recommender import make_recommendation
+from smart_universe import SYMBOLS
+from config import MAX_TITLES_PER_SOURCE
+from email_sender import send_run_success_email
 
-def main():
-    run_id = datetime.datetime.now().strftime("%Y%m%d%H%M%S")
-    print(f"\n🚀 Starting Sentibot run {run_id}")
-    run_data = []
+def main(force_run=False):
+    run_id = int(datetime.now().timestamp())
+    print(f"🚀 Starting Sentibot run #{run_id}")
+
+    all_data = []
 
     for symbol in SYMBOLS:
-        print(f"\n🔍 Processing {symbol}")
+        print(f"\n📰 CNBC headlines scanned for {symbol}:")
         try:
-            yahoo_titles = get_yahoo_news(symbol)[:MAX_TITLES_PER_SOURCE]
-            investors_titles = get_investors_news(symbol)[:MAX_TITLES_PER_SOURCE]
-            cnbc_titles = get_cnbc_news(symbol)[:MAX_TITLES_PER_SOURCE]
+            titles_by_source = fetch_news_titles(symbol)
 
-            all_titles = yahoo_titles + investors_titles + cnbc_titles
-            print(f"📰 Total titles for {symbol}: {len(all_titles)}")
-
-            if not all_titles:
-                print(f"⚠️ No titles found for {symbol}. Skipping.")
+            if not titles_by_source:
+                print(f"⚠️ No titles found for {symbol}")
                 continue
 
-            sentiment = analyze_sentiment(all_titles, symbol)
-            action = get_recommendation(sentiment)
-            trade_result = execute_trade(symbol, action)
-
-            record = {
-                "symbol": symbol,
-                "sentiment": sentiment,
-                "action": action,
-                "trade_result": trade_result,
-                "run_id": run_id,
-                "timestamp": datetime.datetime.now()
-            }
-            run_data.append(record)
-
+            for source, titles in titles_by_source.items():
+                limited_titles = titles[:MAX_TITLES_PER_SOURCE]
+                for title in limited_titles:
+                    print(f"- {title}")
+                    sentiment = analyze_sentiment(title)
+                    all_data.append({
+                        "run_id": run_id,
+                        "symbol": symbol,
+                        "source": source,
+                        "title": title,
+                        "sentiment": sentiment,
+                        "timestamp": datetime.now().isoformat()
+                    })
         except Exception as e:
-            print(f"❌ Error processing {symbol}: {e}")
+            print(f"⚠️ שגיאה בטיפול ב־{symbol}: {e}")
 
-    if run_data:
-        df = pd.DataFrame(run_data)
-        output_path = f"learning_log_full.csv"
-        df.to_csv(output_path, mode="a", index=False, header=not os.path.exists(output_path))
-        print(f"💾 Results saved to {output_path}")
-        update_learning_log(output_path)
-        summarize_performance(output_path)
-        send_run_success_email(run_id, output_path)
-    else:
-        print("⚠️ No data to save. Skipping file creation and email.")
+    if not all_data:
+        print("❌ לא נמצאו כותרות או כל הכותרות נכשלו.")
+        return
+
+    df = pd.DataFrame(all_data)
+    df.to_csv("diagnostic_report.csv", index=False)
+    print("📄 Saved full report: diagnostic_report.csv")
+
+    summary = (
+        df.groupby("symbol")["sentiment"]
+        .mean()
+        .reset_index()
+        .rename(columns={"sentiment": "avg_sentiment"})
+        .sort_values(by="avg_sentiment", ascending=False)
+    )
+    summary.to_csv("diagnostic_summary.csv", index=False)
+    print("📊 Saved summary: diagnostic_summary.csv")
+
+    titles_overview = (
+        df.groupby("symbol")
+        .apply(lambda x: list(x["title"]))
+        .reset_index()
+        .rename(columns={0: "titles"})
+    )
+    titles_overview.to_csv("diagnostic_titles.csv", index=False)
+    print("📝 Saved titles overview: diagnostic_titles.csv")
+
+    send_run_success_email(run_id, attachment_path="diagnostic_summary.csv")
 
 if __name__ == "__main__":
-    main()
+    force = False
+    if len(sys.argv) > 1 and sys.argv[1] == "force":
+        force = True
+    main(force)
