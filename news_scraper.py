@@ -8,7 +8,7 @@ from investors_scraper import get_investors_news
 from marketwatch_scraper import fetch_marketwatch_titles
 # אם יש לך עוד, יבא אותם
 
-from logger_config import setup_logger
+from settings import setup_logger
 
 logger = setup_logger(__name__)
 
