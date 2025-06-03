@@ -4,7 +4,7 @@ import logging
 import sys
 
 # --- הגדרות Logger ---
-def setup_logger(name='sentibot_logger', level=logging.INFO):
+def setup_logger(name='sentibot', level=logging.INFO): # שיניתי את שם הלוגר ברירת מחדל ל'sentibot'
     """
     Sets up a basic logger.
     """
@@ -15,50 +15,55 @@ def setup_logger(name='sentibot_logger', level=logging.INFO):
 
     logger.setLevel(level)
     handler = logging.StreamHandler(sys.stdout) 
-    formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(module)s:%(lineno)d - %(message)s')
+    formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - [%(module)s.%(funcName)s:%(lineno)d] - %(message)s') # פורמט משופר
     handler.setFormatter(formatter)
     logger.addHandler(handler)
     return logger
 
 # --- הגדרות מקורות חדשות (NEWS_SOURCES) ---
-NEWS_SOURCES = {
-    "Yahoo Finance": { # שיניתי את השם שיתאים למה שה-scraper מצפה
+# זהו המילון הראשי ש- news_scraper.py ישתמש בו כדי לדעת אילו מקורות להפעיל
+# ומה הפונקציה המתאימה לכל מקור.
+NEWS_SOURCES_CONFIG = {
+    "Yahoo Finance": {
         "enabled": True,
-        "rss": "https://feeds.finance.yahoo.com/rss/2.0/headline?s={symbol}®ion=US&lang=en-US",
+        "scraper_function_name": "get_yahoo_news", # שם הפונקציה שתקרא מ-yahoo_scraper.py
+        "rss_url_template": "https://feeds.finance.yahoo.com/rss/2.0/headline?s={symbol}®ion=US&lang=en-US", # URL נשמר כאן
         "weight": 1.0
-        # "scraper_function_name": "get_yahoo_news" # אפשר להוסיף את זה אם רוצים
     },
     "CNBC": {
         "enabled": True,
-        # ל-CNBC אין RSS ספציפי לסמל, ה-scraper שלו מטפל בזה
-        "rss": None, # או להשאיר את ה-RSS הכללי: "https://www.cnbc.com/id/100003114/device/rss/rss.html"
+        "scraper_function_name": "get_cnbc_titles",
+        "rss_url_template": "https://www.cnbc.com/id/100003114/device/rss/rss.html", # RSS כללי, הסינון לפי מילות מפתח ב-scraper
         "weight": 1.2
-        # "scraper_function_name": "get_cnbc_titles"
     },
-    "Investors.com": { # שיניתי את השם שיתאים
-        "enabled": True, # שיניתי ל-True כדי שנוכל לבדוק אותו
-        "rss": "https://research.investors.com/rss.aspx?kw={symbol}", # תיקנתי את ה-URL לפי ה-scraper
+    "Investors.com": {
+        "enabled": True, # הפעלתי לבדיקה
+        "scraper_function_name": "get_investors_news",
+        "rss_url_template": "https://research.investors.com/rss.aspx?kw={symbol}",
         "weight": 1.1
-        # "scraper_function_name": "get_investors_news"
     },
-    "MarketWatch": { # הוספתי את MarketWatch
+    "MarketWatch": {
         "enabled": True,
-        "rss": None, # MarketWatch משתמש ב-scraping ישיר, לא RSS
+        "scraper_function_name": "fetch_marketwatch_titles",
+        "base_url_template": "https://www.marketwatch.com/investing/stock/{symbol_lower}", # ל-scraping ישיר
         "weight": 1.0
-        # "scraper_function_name": "fetch_marketwatch_titles"
-    },
-    "Reddit": { # נשאר כפי שהיה, כי Reddit מטופל בנפרד ב-main.py כרגע
-        "enabled": False, # אפשר להפעיל אם רוצים לשלב אותו דרך הלולאה הזו
-        "weight": 1.5
-        # Reddit לא משתמש ב-RSS, אז אין צורך ב-"rss" כאן
-        # "scraper_function_name": "get_reddit_posts"
     }
+    # Reddit מטופל כרגע בנפרד ב-main.py שלך. אם תרצה לשלבו כאן, נוסיף אותו.
 }
 
-# --- דוגמה לאתחול לוגר כללי לשימוש במודולים אחרים אם צריך ---
-# main_app_logger = setup_logger("SentibotApp") # אפשר להשתמש בזה ב-main.py למשל
+# --- הגדרות Reddit (אם תרצה לרכז אותן כאן במקום משתני סביבה ישירות בקוד ה-scraper) ---
+# REDDIT_CLIENT_ID = os.getenv("REDDIT_CLIENT_ID")
+# REDDIT_CLIENT_SECRET = os.getenv("REDDIT_CLIENT_SECRET")
+# REDDIT_USER_AGENT = os.getenv("REDDIT_USER_AGENT", "sentibot/0.2 by YourRedditUsername")
+# REDDIT_SUBREDDITS = ["stocks", "wallstreetbets", "StockMarket", "investing"]
+# REDDIT_LIMIT_PER_SUBREDDIT = 15
+# REDDIT_COMMENTS_PER_POST = 3
 
-# --- פרמטרים נוספים אפשריים ---
-# DEFAULT_MAX_HEADLINES_PER_SOURCE = 10
-# DEFAULT_SENTIMENT_THRESHOLD_BUY = 0.2
-# DEFAULT_SENTIMENT_THRESHOLD_SELL = -0.2
+
+# --- פרמטרים כלליים לאפליקציה ---
+DEFAULT_MAX_HEADLINES_PER_SOURCE = 10
+MIN_HEADLINE_LENGTH = 10 # אורך כותרת מינימלי כללי
+
+# אפשר להוסיף כאן גם את ספי הסנטימנט אם תרצה שהם יהיו קונפיגורביליים
+# SENTIMENT_THRESHOLD_BUY = 0.2
+# SENTIMENT_THRESHOLD_SELL = -0.2
