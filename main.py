@@ -1,4 +1,4 @@
-# main.py – Sentibot עם לוג מתמשך בלבד
+# main.py – Sentibot עם לוג מתמשך ושליחת קובץ כותרות
 import os
 import pandas as pd
 from datetime import datetime, date
@@ -13,6 +13,7 @@ from email_sender import send_run_success_email
 NOW = datetime.now().isoformat()
 LOG_DIR = "logs"
 LOG_PATH = os.path.join(LOG_DIR, "learning_log_full.csv")
+TITLES_PATH = "diagnostic_titles.csv"
 
 def main():
     if not os.path.exists(LOG_DIR):
@@ -20,6 +21,7 @@ def main():
 
     symbols = get_smart_universe()
     log_rows = []
+    title_rows = []
 
     for symbol in symbols:
         print(f"\n🔍 Processing {symbol}")
@@ -56,6 +58,16 @@ def main():
             "headlines": "; ".join(f"{s} [{src}]" for s, src, _ in sentiments)
         })
 
+        for title, source, score in sentiments:
+            title_rows.append({
+                "timestamp": NOW,
+                "symbol": symbol,
+                "source": source,
+                "title": title,
+                "score": score
+            })
+
+    # שמירת קובץ לוג עיקרי
     if log_rows:
         df = pd.DataFrame(log_rows)
         df.to_csv(LOG_PATH, mode='a', header=not os.path.exists(LOG_PATH), index=False)
@@ -63,8 +75,17 @@ def main():
     else:
         print("⚠️ No data to log.")
 
+    # שמירת קובץ כותרות לדיאגנוסטיקה
+    if title_rows:
+        titles_df = pd.DataFrame(title_rows)
+        titles_df.to_csv(TITLES_PATH, index=False)
+        print(f"📝 Titles saved to {TITLES_PATH}")
+    else:
+        print("⚠️ No titles to save.")
+
     run_id = NOW.replace(":", "-").replace("T", "_").split(".")[0]
     send_run_success_email(run_id, LOG_PATH if log_rows else None)
+    send_run_success_email("diagnostic_titles", TITLES_PATH if title_rows else None)
 
 if __name__ == "__main__":
     main()
