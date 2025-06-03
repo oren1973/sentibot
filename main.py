@@ -9,7 +9,7 @@ from news_scraper import fetch_news_titles
 from investors_scraper import get_investors_news
 from recommender import make_recommendation
 from alpaca_trader import trade_stock
-from send_email import send_run_success_email
+from email_sender import send_run_success_email
 
 # --- הגדרות ---
 SYMBOLS = ["AAPL", "TSLA", "NVDA", "MSFT", "META", "PFE", "XOM", "JPM", "DIS", "WMT"]
