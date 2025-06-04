@@ -54,8 +54,8 @@ MAIN_MAX_TOTAL_HEADLINES = 50 # מגבלה כוללת של כותרות לעיב
 # --- ספי החלטה (עבור recommender.py) ---
 # אלו הספים המקוריים שלך, המניחים שהקלט ל-recommender הוא בסקאלת VADER compound (-1 עד +1)
 # אם הקלט הוא ממוצע של ציונים משוקללים (עם טווח שונה), יש להתאים ספים אלו!
-RECOMMENDER_THRESHOLD_BUY_ORIGINAL_SCALE = 0.2
-RECOMMENDER_THRESHOLD_SELL_ORIGINAL_SCALE = -0.2
+RECOMMENDER_THRESHOLD_BUY_ORIGINAL_SCALE = 0.75
+RECOMMENDER_THRESHOLD_SELL_ORIGINAL_SCALE = 0.35
 # אפשר להוסיף ספים לטווח הניטרלי אם רוצים לוגיקה מורכבת יותר ב-recommender:
 # RECOMMENDER_NEUTRAL_LOWER_ORIGINAL_SCALE = -0.05 (סתם דוגמה)
 # RECOMMENDER_NEUTRAL_UPPER_ORIGINAL_SCALE = 0.05  (סתם דוגמה)
