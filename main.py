@@ -2,7 +2,7 @@ import os
 import sys
 import pandas as pd
 from datetime import datetime
-from news_scraper import fetch_news_titles
+from news_aggregator import fetch_all_news
 from sentiment_analyzer import analyze_sentiment
 from recommender import make_recommendation
 from smart_universe import SYMBOLS
