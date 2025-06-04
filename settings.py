@@ -31,16 +31,27 @@ NEWS_SOURCES_CONFIG = {
         "weight": 1.2
     },
     "Investors.com": {
-        "enabled": False, # נשאר מנוטרל זמנית
+        "enabled": False, 
         "scraper_function_name": "get_investors_news",
         "rss_url_template": "https://research.investors.com/rss.aspx?kw={symbol}",
         "weight": 1.1
     },
     "MarketWatch": {
-        "enabled": False, # נשאר מנוטרל זמנית
+        "enabled": False, 
         "scraper_function_name": "fetch_marketwatch_titles",
         "base_url_template": "https://www.marketwatch.com/investing/stock/{symbol_lower}",
         "weight": 1.0
+    },
+    # הוספת הגדרות משקל ל-Reddit
+    "Reddit_Post": {
+        "enabled": True, # 'enabled' כאן הוא רק placeholder, הפעלת Reddit נשלטת מ-REDDIT_ENABLED
+        "scraper_function_name": None, # Reddit נאסף בנפרד, לא דרך news_aggregator הכללי
+        "weight": 1.0  # התאם את המשקל הזה לפי הצורך
+    },
+    "Reddit_Comment": {
+        "enabled": True, # כנ"ל
+        "scraper_function_name": None, # כנ"ל
+        "weight": 0.8  # לדוגמה, לתת פחות משקל לתגובות מאשר לפוסטים
     }
 }
 
@@ -50,31 +61,25 @@ MIN_HEADLINE_LENGTH = 10
 MAIN_MAX_TOTAL_HEADLINES = 50
 
 # --- ספי החלטה (עבור recommender.py) ---
-# התאם את הספים האלה לסקאלה של ציוני הסנטימנט המשוקללים!
-RECOMMENDER_THRESHOLD_BUY = 0.75  # שונה שם והערך לדוגמה
-RECOMMENDER_THRESHOLD_SELL = 0.35 # שונה שם והערך לדוגמה
+# נסה עם ערכים אלו, ונצטרך לכייל אותם בהמשך!
+RECOMMENDER_THRESHOLD_BUY = 0.70  # אם ממוצע משוקלל (0..~1.5) גבוה מזה -> קניה
+RECOMMENDER_THRESHOLD_SELL = 0.40 # אם ממוצע משוקלל נמוך מזה -> מכירה (כרגע רק לסגירת פוזיציה)
 
 # --- הגדרות Reddit ---
-REDDIT_ENABLED = os.getenv("REDDIT_ENABLED", "True").lower() in ('true', '1', 't') # הפעלת Reddit כברירת מחדל
+REDDIT_ENABLED = os.getenv("REDDIT_ENABLED", "True").lower() in ('true', '1', 't')
 REDDIT_SUBREDDITS_STR = os.getenv("REDDIT_SUBREDDITS_LIST", "stocks,wallstreetbets,StockMarket,investing")
 REDDIT_SUBREDDITS = [sub.strip() for sub in REDDIT_SUBREDDITS_STR.split(',')]
 try:
-    REDDIT_LIMIT_PER_SUBREDDIT = int(os.getenv("REDDIT_LIMIT_PER_SUBREDDIT", "10")) # הקטנתי קצת את ברירת המחדל
-    REDDIT_COMMENTS_PER_POST = int(os.getenv("REDDIT_COMMENTS_PER_POST", "2"))   # הקטנתי קצת את ברירת המחדל
+    REDDIT_LIMIT_PER_SUBREDDIT = int(os.getenv("REDDIT_LIMIT_PER_SUBREDDIT", "10"))
+    REDDIT_COMMENTS_PER_POST = int(os.getenv("REDDIT_COMMENTS_PER_POST", "2"))
 except ValueError:
     REDDIT_LIMIT_PER_SUBREDDIT = 10
     REDDIT_COMMENTS_PER_POST = 2
 
 # --- הגדרות Alpaca ---
-# ודא שמשתני הסביבה ALPACA_API_KEY ו-ALPACA_SECRET_KEY מוגדרים
-ALPACA_BASE_URL = "https://paper-api.alpaca.markets" # ל-Paper Trading
-# ALPACA_BASE_URL = "https://api.alpaca.markets" # ל-Live Trading - היזהר!
-TRADE_QUANTITY = 1 # כמות מניות לקנות/למכור בכל פקודה
+ALPACA_BASE_URL = "https://paper-api.alpaca.markets" 
+TRADE_QUANTITY = 1 
 
 # --- נתיבים לקבצי לוג ודוחות ---
 REPORTS_OUTPUT_DIR = "sentibot_reports"
 LEARNING_LOG_CSV_PATH = os.path.join(REPORTS_OUTPUT_DIR, "learning_log_cumulative.csv")
-# קבצי דוחות יומיים ישמרו עם חותמת זמן בשם שלהם בתוך REPORTS_OUTPUT_DIR
-
-# --- רשימת סימולי המניות למעקב (מיובאת מ-smart_universe.py ב-main) ---
-# SYMBOLS מוגדר ב-smart_universe.py
