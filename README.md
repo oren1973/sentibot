@@ -171,3 +171,9 @@ REDDIT_USER_AGENT="Sentibot/0.3 by YourUniqueBotName" # חשוב שיהיה יי
 # REDDIT_SUBREDDITS_LIST="stocks,wallstreetbets,finance"
 # REDDIT_LIMIT_PER_SUBREDDIT="10"
 # REDDIT_COMMENTS_PER_POST="2"
+הגדרות עיקריות בקובץ settings.py:
+NEWS_SOURCES_CONFIG: הגדרת מקורות החדשות, ה-URL שלהם, הפונקציה המתאימה, והאם הם מאופשרים (enabled), והמשקל שלהם (weight).
+SYMBOLS (מיובא מ-smart_universe.py): רשימת המניות למעקב.
+RECOMMENDER_THRESHOLD_BUY, RECOMMENDER_THRESHOLD_SELL: ספי ההחלטה.
+פרמטרים של Reddit (אם לא מוגדרים כמשתני סביבה).
+נתיבים לקבצים ופרמטרים כלליים נוספים.
