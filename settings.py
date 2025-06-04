@@ -33,13 +33,13 @@ NEWS_SOURCES_CONFIG = {
         "weight": 1.2
     },
     "Investors.com": {
-        "enabled": True, 
+        "enabled": False, 
         "scraper_function_name": "get_investors_news",
         "rss_url_template": "https://research.investors.com/rss.aspx?kw={symbol}",
         "weight": 1.1
     },
     "MarketWatch": {
-        "enabled": True, # שנה ל-False אם הוא עדיין נחסם, עד שנמצא פתרון
+        "enabled": False, # שנה ל-False אם הוא עדיין נחסם, עד שנמצא פתרון
         "scraper_function_name": "fetch_marketwatch_titles",
         "base_url_template": "https://www.marketwatch.com/investing/stock/{symbol_lower}",
         "weight": 1.0
