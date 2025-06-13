@@ -16,7 +16,7 @@ from reddit_scraper import get_reddit_posts
 from sentiment_analyzer import analyze_sentiment
 from recommender import make_recommendation
 from alpaca_trader import trade_stock
-from email_sender import send_run_success_email 
+from email_sender import send_run_success_email # ודא שפונקציה זו תומכת בריבוי קבצים או שנשנה אותה
 
 logger = setup_logger("SentibotMain")
 
@@ -141,25 +141,31 @@ def main(force_run: bool = False):
             logger.info(f"Recommendation for '{symbol}': {current_trade_decision} (Score: {avg_sentiment_for_symbol:.4f})")
             
             previous_decision_for_symbol = "N/A"
+            # טען החלטה קודמת מהלוג המצטבר
             if not learning_log_df.empty and symbol in learning_log_df['symbol'].values:
+                # סנן את הלוג עבור הסמל הנוכחי וסדר לפי תאריך יורד כדי לקבל את האחרון
                 symbol_specific_log = learning_log_df[learning_log_df['symbol'] == symbol].sort_values(by='datetime', ascending=False)
                 if not symbol_specific_log.empty:
                     previous_decision_for_symbol = symbol_specific_log.iloc[0]['decision']
             
-            logger.info(f"Previous decision for '{symbol}': {previous_decision_for_symbol}, Current decision: {current_trade_decision}")
+            logger.info(f"Previous decision for '{symbol}' from cumulative log: {previous_decision_for_symbol}, Current decision: {current_trade_decision}")
 
             trade_action_taken = False
+            # הלוגיקה שלך למסחר נשארת זהה
             if current_trade_decision == "BUY" and current_trade_decision != previous_decision_for_symbol:
                 logger.info(f"Decision changed for {symbol} from {previous_decision_for_symbol} to BUY. Attempting trade.")
                 trade_action_taken = trade_stock(symbol=symbol, decision="buy")
-            elif current_trade_decision == "SELL" and previous_decision_for_symbol == "BUY":
+            elif current_trade_decision == "SELL" and previous_decision_for_symbol == "BUY": # רק אם הייתה קנייה קודם
                 logger.info(f"Decision changed for {symbol} from BUY to SELL. Attempting to close position.")
-                trade_action_taken = trade_stock(symbol=symbol, decision="sell")
+                trade_action_taken = trade_stock(symbol=symbol, decision="sell") # סגירת פוזיציית לונג
             elif current_trade_decision == "SELL" and previous_decision_for_symbol != "BUY":
+                # כאן אפשר להוסיף לוגיקה למכירה בחסר אם תרצה בעתיד
+                # כרגע, אם לא הייתה קנייה קודמת, לא נעשה כלום עם החלטת SELL
                 logger.info(f"Decision is SELL for {symbol}, but no prior BUY position or prior decision was not BUY. No short selling action taken.")
-            else:
+            else: # כולל HOLD, או BUY/SELL שלא השתנה
                 logger.info(f"No trade action needed for {symbol}. Decision: {current_trade_decision}, Previous: {previous_decision_for_symbol}")
 
+            # שמירת הרשומה החדשה בלוג המצטבר
             learning_log_entry = {
                 "run_id": run_id_str, "symbol": symbol, "datetime": current_datetime_iso,
                 "sentiment_avg": round(avg_sentiment_for_symbol, 4),
@@ -167,56 +173,83 @@ def main(force_run: bool = False):
                 "num_total_articles": len(sentiment_scores_list),
                 "main_source_overall": main_source_overall_str,
                 "decision": current_trade_decision,
-                "previous_decision": previous_decision_for_symbol,
+                "previous_decision": previous_decision_for_symbol, # ההחלטה הקודמת מהלוג המצטבר
                 "trade_executed": trade_action_taken,
-                "raw_scores_details": str(current_symbol_sentiments_details)
+                "raw_scores_details": str(current_symbol_sentiments_details) # המר לרשימה של מחרוזות אם צריך
             }
+            # עדכן את ה-DataFrame של הלוג המצטבר והחזר אותו
             learning_log_df = save_learning_log_entry(learning_log_df, learning_log_entry)
             
+            # שמירת סיכום יומי (הקוד שלך נשאר זהה)
             aggregated_symbol_analysis.append({
                 "run_id": run_id_str, "symbol": symbol, "avg_sentiment_score": avg_sentiment_for_symbol,
                 "num_analyzed_headlines": len(sentiment_scores_list), "trade_decision": current_trade_decision,
-                "previous_decision_logged": previous_decision_for_symbol, "trade_attempted": trade_action_taken,
+                "previous_decision_logged": previous_decision_for_symbol, # השתמש בהחלטה מהלוג המצטבר
+                "trade_attempted": trade_action_taken,
                 "processing_datetime": current_datetime_iso
             })
 
         except Exception as e_symbol_processing:
             logger.error(f"A critical error occurred while processing symbol '{symbol}': {e_symbol_processing}", exc_info=True)
 
+    # --- שמירת דוחות יומיים ---
+    daily_summary_report_filepath = None
+    daily_detailed_report_filepath = None
+
     if all_individual_headline_analysis:
         detailed_report_df = pd.DataFrame(all_individual_headline_analysis)
         detailed_report_filename = f"detailed_headlines_{run_id_str}.csv"
-        detailed_report_filepath = os.path.join(REPORTS_OUTPUT_DIR, detailed_report_filename)
+        daily_detailed_report_filepath = os.path.join(REPORTS_OUTPUT_DIR, detailed_report_filename)
         try:
-            detailed_report_df.to_csv(detailed_report_filepath, index=False, encoding='utf-8-sig')
-            logger.info(f"📄 Saved daily detailed headline report: {detailed_report_filepath}")
+            detailed_report_df.to_csv(daily_detailed_report_filepath, index=False, encoding='utf-8-sig')
+            logger.info(f"📄 Saved daily detailed headline report: {daily_detailed_report_filepath}")
         except Exception as e_save_detail:
-            logger.error(f"Failed to save daily detailed report to '{detailed_report_filepath}': {e_save_detail}")
+            logger.error(f"Failed to save daily detailed report to '{daily_detailed_report_filepath}': {e_save_detail}")
+            daily_detailed_report_filepath = None # אפס את הנתיב אם השמירה נכשלה
 
-    path_to_email_attachment = None
     if aggregated_symbol_analysis:
         summary_report_df = pd.DataFrame(aggregated_symbol_analysis)
         summary_report_df = summary_report_df.sort_values(by="avg_sentiment_score", ascending=False)
         summary_report_filename = f"summary_decisions_{run_id_str}.csv"
-        summary_report_filepath = os.path.join(REPORTS_OUTPUT_DIR, summary_report_filename)
-        path_to_email_attachment = summary_report_filepath
+        daily_summary_report_filepath = os.path.join(REPORTS_OUTPUT_DIR, summary_report_filename)
         try:
-            summary_report_df.to_csv(summary_report_filepath, index=False, encoding='utf-8-sig')
-            logger.info(f"📊 Saved daily aggregated symbol analysis report: {summary_report_filepath}")
+            summary_report_df.to_csv(daily_summary_report_filepath, index=False, encoding='utf-8-sig')
+            logger.info(f"📊 Saved daily aggregated symbol analysis report: {daily_summary_report_filepath}")
         except Exception as e_save_summary:
-            logger.error(f"Failed to save daily summary report to '{summary_report_filepath}': {e_save_summary}")
-            path_to_email_attachment = None 
+            logger.error(f"Failed to save daily summary report to '{daily_summary_report_filepath}': {e_save_summary}")
+            daily_summary_report_filepath = None # אפס את הנתיב אם השמירה נכשלה
     
+    # --- שליחת מייל עם דוחות ---
+    # הכן רשימה של קבצים לצירוף
+    attachments_to_send = []
+    if daily_summary_report_filepath and os.path.exists(daily_summary_report_filepath):
+        attachments_to_send.append(daily_summary_report_filepath)
+    
+    # הוסף את הלוג המצטבר לרשימת הקבצים לשליחה
+    # LEARNING_LOG_CSV_PATH הוא הנתיב לקובץ הלוג המצטבר מה-settings
+    if os.path.exists(LEARNING_LOG_CSV_PATH):
+        attachments_to_send.append(LEARNING_LOG_CSV_PATH)
+        logger.info(f"Preparing to attach cumulative log: {LEARNING_LOG_CSV_PATH}")
+    else:
+        logger.warning(f"Cumulative log file not found at {LEARNING_LOG_CSV_PATH}, will not be attached.")
+
+    # אפשר להוסיף גם את הדוח המפורט אם רוצים
+    # if daily_detailed_report_filepath and os.path.exists(daily_detailed_report_filepath):
+    #     attachments_to_send.append(daily_detailed_report_filepath)
+
     if 'send_run_success_email' in globals() and callable(send_run_success_email):
-        logger.info(f"Attempting to send summary email for run ID: {run_id_str}...")
-        email_sent_successfully = send_run_success_email(
-            run_id_str=run_id_str, 
-            attachment_path=path_to_email_attachment
-        )
-        if email_sent_successfully:
-            logger.info(f"📧 Summary email for run {run_id_str} sent/attempted successfully.")
+        if attachments_to_send: # שלח מייל רק אם יש מה לצרף (או שתשנה את הלוגיקה אם תמיד רוצים מייל)
+            logger.info(f"Attempting to send summary email for run ID: {run_id_str} with attachments: {attachments_to_send}")
+            email_sent_successfully = send_run_success_email(
+                run_id_str=run_id_str, 
+                attachment_paths=attachments_to_send # שלח רשימה של נתיבים
+            )
+            if email_sent_successfully:
+                logger.info(f"📧 Summary email for run {run_id_str} sent/attempted successfully.")
+            else:
+                logger.error(f"🚨 Failed to send summary email for run {run_id_str}.")
         else:
-            logger.error(f"🚨 Failed to send summary email for run {run_id_str}.")
+            logger.info(f"No reports generated or cumulative log found. Skipping email for run ID: {run_id_str}.")
     
     logger.info(f"🏁 Sentibot run ID {run_id_str} finished.")
 
