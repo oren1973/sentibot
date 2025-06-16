@@ -1,10 +1,10 @@
-# main.py
+# main.py (עם העברת יצירת תיקייה + שיפורים קודמים)
 import os
 import sys
 import pandas as pd
 from datetime import datetime, date
 import logging
-import json # הוספתי עבור שמירת raw_scores_details כ-JSON
+import json 
 
 from settings import (
     setup_logger, NEWS_SOURCES_CONFIG, MAIN_MAX_TOTAL_HEADLINES,
@@ -22,7 +22,6 @@ from email_sender import send_run_success_email
 logger = setup_logger("SentibotMain")
 
 def load_learning_log() -> pd.DataFrame:
-    # הגדר DataFrame ריק למקרה שנצטרך להחזיר אותו
     empty_log_df = pd.DataFrame(columns=[
         "run_id", "symbol", "datetime", "sentiment_avg", "sentiment_std", 
         "num_total_articles", "main_source_overall",
@@ -36,7 +35,6 @@ def load_learning_log() -> pd.DataFrame:
 
     try:
         logger.info(f"Attempting to read CSV: {LEARNING_LOG_CSV_PATH}")
-        # נסה לקרוא את הקובץ, ואם יש עמודות עם הרבה פסיקים בטקסט, ציין escapechar
         df = pd.read_csv(LEARNING_LOG_CSV_PATH, escapechar='\\') 
         logger.info(f"Successfully read {len(df)} rows from {LEARNING_LOG_CSV_PATH}.")
         
@@ -48,15 +46,15 @@ def load_learning_log() -> pd.DataFrame:
             logger.error(f"'datetime' column MISSING in {LEARNING_LOG_CSV_PATH}. Cannot process previous decisions. Returning empty log.")
             return empty_log_df
 
-        # נסה להמיר את עמודת התאריך
-        # שמור עותק של העמודה המקורית למקרה של בעיות דיבאגינג
         df['datetime_original_str'] = df['datetime'].astype(str) 
         
-        # נסה פורמט ISO8601 תחילה, ואז תן ל-Pandas לנסות להסיק אם זה נכשל
-        # שימוש ב- infer_datetime_format=True יכול לעזור אם יש ערבוב קל של פורמטים.
-        # errors='coerce' יכניס NaT (Not a Time) לערכים שלא ניתנים להמרה.
-        df['datetime_parsed'] = pd.to_datetime(df['datetime_original_str'], errors='coerce', infer_datetime_format=True)
-        
+        try:
+            df['datetime_parsed'] = pd.to_datetime(df['datetime_original_str'], errors='coerce', infer_datetime_format=True)
+            logger.info("Attempted to parse 'datetime' column (inferring format).")
+        except Exception as e_parse_dt: 
+            logger.error(f"Unexpected error during pd.to_datetime conversion: {e_parse_dt}", exc_info=True)
+            df['datetime_parsed'] = pd.NaT 
+
         num_failed_parsing = df['datetime_parsed'].isnull().sum()
         if num_failed_parsing > 0:
             logger.warning(f"Could not parse {num_failed_parsing} datetime strings in 'datetime' column.")
@@ -64,9 +62,8 @@ def load_learning_log() -> pd.DataFrame:
             logger.warning(f"Examples of original datetime strings that failed parsing: {failed_examples}")
         
         original_len = len(df)
-        df.dropna(subset=['datetime_parsed'], inplace=True) # הסר שורות עם NaT
+        df.dropna(subset=['datetime_parsed'], inplace=True) 
         
-        # החלף את העמודה המקורית רק אם יש ערכים תקינים אחרי ההמרה
         if not df.empty:
             df['datetime'] = df['datetime_parsed'] 
         
@@ -93,56 +90,50 @@ def load_learning_log() -> pd.DataFrame:
 def save_learning_log_entry(log_df: pd.DataFrame, new_entry_data: dict):
     try:
         new_entry_df = pd.DataFrame([new_entry_data])
-        if 'datetime' in new_entry_df.columns: # ודא שהעמודה קיימת לפני הניסיון להמיר
+        if 'datetime' in new_entry_df.columns: 
             new_entry_df['datetime'] = pd.to_datetime(new_entry_df['datetime'])
 
         if log_df.empty:
             log_df = new_entry_df
         else:
-            # ודא שגם בלוג הקיים עמודת התאריך היא מסוג datetime לפני איחוד
             if 'datetime' in log_df.columns:
-                log_df['datetime'] = pd.to_datetime(log_df['datetime'], errors='coerce') # coerce למקרה שיש עדיין ערכים ישנים בעיתיים
-                log_df.dropna(subset=['datetime'], inplace=True) # הסר שורות בעייתיות אם נוצרו
+                log_df['datetime'] = pd.to_datetime(log_df['datetime'], errors='coerce') 
+                log_df.dropna(subset=['datetime'], inplace=True) 
 
             log_df = pd.concat([log_df, new_entry_df], ignore_index=True)
         
-        # לפני השמירה, ודא שהעמודה 'datetime' עדיין מסוג datetime
         if 'datetime' in log_df.columns and not pd.api.types.is_datetime64_any_dtype(log_df['datetime']):
              log_df['datetime'] = pd.to_datetime(log_df['datetime'], errors='coerce')
              log_df.dropna(subset=['datetime'], inplace=True)
 
-
-        # שמירה: Pandas ישמור אובייקטי datetime בפורמט ISO8601 סטנדרטי ל-CSV
-        # אם כי לפעמים הוא עשוי לכלול ' ' במקום 'T' אם לא מציינים date_format.
-        # כדי להבטיח פורמט עם 'T', אפשר להמיר למחרוזת לפני השמירה.
         df_to_save = log_df.copy()
         if 'datetime' in df_to_save.columns and pd.api.types.is_datetime64_any_dtype(df_to_save['datetime']):
-            # הפורמט הזה מבטיח 'T' ומיקרו-שניות אם קיימות
             df_to_save['datetime'] = df_to_save['datetime'].dt.strftime('%Y-%m-%dT%H:%M:%S.%f')
         
         df_to_save.to_csv(LEARNING_LOG_CSV_PATH, index=False, encoding='utf-8-sig')
         logger.info(f"Saved new entry to learning log. Total entries: {len(df_to_save)}")
-        return log_df # החזר את ה-log_df המקורי עם סוגי נתונים נכונים להמשך העבודה
+        return log_df 
     except Exception as e:
         logger.error(f"Error saving entry to learning log {LEARNING_LOG_CSV_PATH}: {e}", exc_info=True)
         return log_df
-
 
 def main(force_run: bool = False):
     run_id_str = datetime.now().strftime("%Y%m%d_%H%M%S")
     current_datetime_iso = datetime.now().isoformat(timespec='microseconds') 
     logger.info(f"🚀 Starting Sentibot run ID: {run_id_str}")
+
+    # --- יצירת תיקיית הדוחות בתחילת הריצה ---
+    try:
+        os.makedirs(REPORTS_OUTPUT_DIR, exist_ok=True)
+        logger.info(f"Ensured reports directory exists: {REPORTS_OUTPUT_DIR}")
+    except OSError as e_dir:
+        logger.error(f"Could not create/ensure reports directory '{REPORTS_OUTPUT_DIR}': {e_dir}. Using current directory for reports if possible, but this may cause issues with log persistence.")
+        # אם יצירת התיקייה נכשלה, זה יכול להיות סימן לבעיית הרשאות או נתיב לא תקין בסביבת Render
+        # LEARNING_LOG_CSV_PATH עדיין יצביע למיקום המקורי, אך ייתכן שהכתיבה תיכשל.
+    # --- סוף יצירת תיקייה ---
     
     learning_log_df = load_learning_log()
     
-    try:
-        os.makedirs(REPORTS_OUTPUT_DIR, exist_ok=True)
-        logger.info(f"Reports will be saved to directory: {REPORTS_OUTPUT_DIR}")
-    except OSError as e_dir:
-        logger.error(f"Could not create reports directory '{REPORTS_OUTPUT_DIR}': {e_dir}. Using current directory for reports.")
-        # global REPORTS_OUTPUT_DIR # אם REPORTS_OUTPUT_DIR הוא גלובלי וניתן לשינוי
-        # REPORTS_OUTPUT_DIR = "." # או טיפול אחר בהתאם לצורך
-
     all_individual_headline_analysis = []
     aggregated_symbol_analysis = []
 
@@ -226,17 +217,16 @@ def main(force_run: bool = False):
             
             logger.info(f"Recommendation for '{symbol}': {current_trade_decision} (Based on raw average score: {avg_sentiment_for_symbol:.4f})")
             
-            previous_decision_for_symbol = "N/A" # אתחול
-            if not learning_log_df.empty: # ודא שהלוג אינו ריק לפני גישה
+            previous_decision_for_symbol = "N/A" 
+            if not learning_log_df.empty: 
                 symbol_specific_entries = learning_log_df[learning_log_df['symbol'] == symbol]
                 if not symbol_specific_entries.empty:
-                    # ודא שעמודת התאריך היא אכן מסוג datetime לפני המיון
                     if pd.api.types.is_datetime64_any_dtype(symbol_specific_entries['datetime']):
                         symbol_specific_log = symbol_specific_entries.sort_values(by='datetime', ascending=False)
                         if not symbol_specific_log.empty:
                             previous_decision_for_symbol = str(symbol_specific_log.iloc[0]['decision']).upper()
                     else:
-                        logger.warning(f"Cannot determine previous decision for {symbol} as 'datetime' column in log is not a datetime type.")
+                        logger.warning(f"Cannot determine previous decision for {symbol} as 'datetime' column in loaded log is not a datetime type (it's {symbol_specific_entries['datetime'].dtype}).")
             
             logger.info(f"Previous decision for '{symbol}' from cumulative log: {previous_decision_for_symbol}, Current decision: {current_trade_decision}")
 
@@ -309,11 +299,11 @@ def main(force_run: bool = False):
         attachments_to_send.append(daily_summary_report_filepath)
         logger.info(f"Added daily summary report to email attachments: {daily_summary_report_filepath}")
     
-    if os.path.exists(LEARNING_LOG_CSV_PATH):
+    if os.path.exists(LEARNING_LOG_CSV_PATH): # בדוק שוב אם הקובץ נוצר/קיים לפני הצירוף
         attachments_to_send.append(LEARNING_LOG_CSV_PATH)
         logger.info(f"Added cumulative learning log to email attachments: {LEARNING_LOG_CSV_PATH}")
     else:
-        logger.warning(f"Cumulative log file not found at {LEARNING_LOG_CSV_PATH}, will not be attached to email.")
+        logger.warning(f"Cumulative log file not found at {LEARNING_LOG_CSV_PATH} for email attachment (it might have failed to save or was not created).")
 
     if 'send_run_success_email' in globals() and callable(send_run_success_email):
         if attachments_to_send: 
