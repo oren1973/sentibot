@@ -24,12 +24,34 @@ def load_learning_log() -> pd.DataFrame:
     if os.path.exists(LEARNING_LOG_CSV_PATH):
         try:
             df = pd.read_csv(LEARNING_LOG_CSV_PATH)
+            logger.info(f"Attempting to load learning log: {LEARNING_LOG_CSV_PATH} with initially {len(df)} entries.")
+            
             if 'datetime' in df.columns:
-                 df['datetime'] = pd.to_datetime(df['datetime'])
-            logger.info(f"Loaded existing learning log: {LEARNING_LOG_CSV_PATH} with {len(df)} entries.")
-            return df
+                # נסה להמיר את עמודת התאריך, הכנס NaT עבור ערכים בעייתיים
+                # infer_datetime_format=True יכול לעזור ל-Pandas לזהות פורמטים נפוצים (כולל ISO עם 'T')
+                # format='ISO8601' יהיה יותר קפדני אם אתה יודע שכל התאריכים הם ISO
+                df['datetime'] = pd.to_datetime(df['datetime'], errors='coerce', infer_datetime_format=True)
+                
+                original_len = len(df)
+                # הסר שורות שבהן ההמרה נכשלה והתאריך הוא NaT
+                df.dropna(subset=['datetime'], inplace=True)
+                
+                if len(df) < original_len:
+                    logger.warning(f"Removed {original_len - len(df)} rows with invalid or unparseable datetime format from learning log.")
+            
+            if not df.empty:
+                logger.info(f"Successfully loaded and processed learning log: {LEARNING_LOG_CSV_PATH} with {len(df)} valid entries.")
+                return df
+            else:
+                # זה יכול לקרות אם כל השורות היו עם תאריך בעייתי, או שהקובץ היה ריק מלכתחילה אחרי סינון כותרות
+                logger.warning(f"Learning log is empty after attempting to parse datetime or was initially empty. Starting with an empty log.")
+        
         except Exception as e:
-            logger.error(f"Error loading learning log from {LEARNING_LOG_CSV_PATH}: {e}. Starting with an empty log.", exc_info=True)
+            logger.error(f"Error loading or processing learning log from {LEARNING_LOG_CSV_PATH}: {e}. Starting with an empty log.", exc_info=True)
+    else:
+        logger.info(f"Learning log file not found at {LEARNING_LOG_CSV_PATH}. Starting with an empty log.")
+        
+    # אם הקובץ לא קיים, או שהייתה שגיאה, או שהוא ריק אחרי הכל
     return pd.DataFrame(columns=[
         "run_id", "symbol", "datetime", "sentiment_avg", "sentiment_std", 
         "num_total_articles", "main_source_overall",
