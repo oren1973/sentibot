@@ -21,7 +21,8 @@ NEWS_SOURCES_CONFIG = {
     "Yahoo Finance": {
         "enabled": True, 
         "scraper_function_name": "get_yahoo_news", 
-        "rss_url_template": "https://feeds.finance.yahoo.com/rss/2.0/headline?s={symbol}&lang=en-US", # ה-URL תוקן כאן
+        # השינוי כאן: הסרת ®ion=US מה-URL
+        "rss_url_template": "https://feeds.finance.yahoo.com/rss/2.0/headline?s={symbol}&lang=en-US", 
         "weight": 1.0 
     },
     "CNBC": {
@@ -29,7 +30,7 @@ NEWS_SOURCES_CONFIG = {
         "scraper_function_name": "get_cnbc_titles",
         "rss_url_template": "https://www.cnbc.com/id/100003114/device/rss/rss.html",
         "weight": 1.2,
-        "max_feed_items_to_scan_cnbc": 100 # הוספתי פרמטר זה, אפשר לשנות
+        "max_feed_items_to_scan_cnbc": 100 # הוספתי פרמטר זה, ערך ברירת המחדל בפונקציה הוא 50
     },
     "Investors.com": {
         "enabled": False, 
@@ -72,15 +73,11 @@ try:
     REDDIT_LIMIT_PER_SUBREDDIT = int(os.getenv("REDDIT_LIMIT_PER_SUBREDDIT", "10"))
     REDDIT_COMMENTS_PER_POST = int(os.getenv("REDDIT_COMMENTS_PER_POST", "2"))
 except ValueError:
-    # לוגר זמני למקרה שהלוגר הראשי עוד לא אותחל והייתה שגיאה בקריאת משתני סביבה
-    temp_settings_logger = logging.getLogger("settings_init_fallback")
-    if not temp_settings_logger.hasHandlers():
-        temp_handler = logging.StreamHandler(sys.stdout)
-        temp_formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
-        temp_handler.setFormatter(temp_formatter)
-        temp_settings_logger.addHandler(temp_handler)
-        temp_settings_logger.setLevel(logging.WARNING)
-    temp_settings_logger.warning("Could not parse Reddit limit/comments parameters from environment variables. Using defaults: Limit=10, Comments=2.")
+    # שימוש בלוגר שהוגדר למעלה, או לוגר זמני אם זה קורה לפני הגדרת הלוגר הראשי
+    # במקרה זה, הפונקציה setup_logger כבר הוגדרה למעלה, אז אפשר להשתמש בה.
+    # אם יש חשש שזה רץ לפני שהלוגר הראשי מאותחל, אפשר להשתמש בלוגר מובנה של פייתון.
+    settings_init_logger = setup_logger("settings_init", level=logging.WARNING) # שימוש בפונקציה שלנו
+    settings_init_logger.warning("Could not parse Reddit limit/comments parameters from environment variables. Using defaults: Limit=10, Comments=2.")
     REDDIT_LIMIT_PER_SUBREDDIT = 10
     REDDIT_COMMENTS_PER_POST = 2
 
@@ -91,8 +88,13 @@ TRADE_QUANTITY = 1
 # --- נתיבים לקבצי לוג ודוחות ---
 # ודא ששם התיקייה תואם למה ש-Render יוצר או מאפשר לך ליצור
 # אם Render משתמש ב- /data כ-persistent storage, עדיף להשתמש בנתיב מוחלט
-# REPORTS_BASE_DIR = os.getenv("REPORTS_BASE_DIR", "/data/sentibot_reports") # אפשרות לנתיב מבוסס משתנה סביבה
-REPORTS_BASE_DIR = "sentibot_reports" # כרגע, תיקייה יחסית. בסביבת Render, ודא שהיא נכתבת למקום הנכון.
+# לדוגמה, אם Render מקצה /data ואתה רוצה תיקייה בשם sentibot_data שם:
+# REPORTS_BASE_DIR = os.getenv("PERSISTENT_STORAGE_DIR", "/data/sentibot_data") 
+# כרגע נשאיר את זה יחסי, אבל שים לב שזה יכול להיות המקור לבעיית "קובץ לא נמצא"
+REPORTS_BASE_DIR = "sentibot_reports" 
 
 REPORTS_OUTPUT_DIR = REPORTS_BASE_DIR 
 LEARNING_LOG_CSV_PATH = os.path.join(REPORTS_OUTPUT_DIR, "learning_log_cumulative.csv")
+
+# --- רשימת סימולי המניות למעקב (מיובאת מ-smart_universe.py ב-main.py) ---
+# המשתנה SYMBOLS עצמו מיובא מקובץ smart_universe.py בתוך main.py
