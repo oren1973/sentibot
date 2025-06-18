@@ -3,26 +3,22 @@ from bs4 import BeautifulSoup
 import pandas as pd
 from datetime import datetime
 import time
-import logging
-import os # נוסף עבור בדיקת קיום קובץ ושליפת שם קובץ
+import logging 
+import os 
 
-# נניח ש-email_sender.py ו-settings.py זמינים לייבוא
 try:
     from email_sender import send_email
-    from settings import setup_logger # אם אתה רוצה להשתמש בלוגר המרכזי שלך
+    from settings import setup_logger 
     EMAIL_SENDER_AVAILABLE = True
-    # אפשר להשתמש ב-setup_logger אם הוא מיובא בהצלחה
-    logger = setup_logger("YahooArchiveScraperPilot", level=logging.DEBUG) # DEBUG כדי לראות יותר פרטים
+    logger = setup_logger("YahooArchiveScraperPilot", level=logging.DEBUG) 
 except ImportError:
     EMAIL_SENDER_AVAILABLE = False
     logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
     logger = logging.getLogger("YahooArchiveScraperPilot_Fallback")
     logger.warning("Could not import from email_sender or settings for pilot. Email functionality will be disabled if run in cloud without env vars.")
 
-
-# סמל לבדיקה
 TEST_SYMBOL = "AAPL" 
-YAHOO_NEWS_URL_TEMPLATE = "https://finance.yahoo.com/quote/{symbol}/news?p={symbol}"
+YAHOO_NEWS_URL_TEMPLATE = "https://finance.yahoo.com/quote/{symbol}/news" # <--- השינוי כאן
 OUTPUT_CSV_FILENAME = f"yahoo_scraped_pilot_{TEST_SYMBOL}.csv"
 
 HEADERS = {
@@ -41,23 +37,31 @@ def scrape_yahoo_news_page(symbol: str) -> list[dict]:
         
         soup = BeautifulSoup(response.content, 'html.parser')
         
-        # selectors - אלה יצטרכו כנראה התאמה כי מבנה האתר משתנה
         news_items = soup.find_all('li', class_=lambda x: x and 'StreamItem' in x and 'QuoteNews' in x)
-        # אפשר לנסות selectors נוספים אם הראשון לא עובד:
-        # if not news_items:
-        #    news_items = soup.select('div.Cf > ul > li > div > div') 
-
-        if not news_items:
-            logger.warning(f"No news items found on the page for {symbol} with current selectors. Page structure might have changed.")
-            logger.debug(f"Page HTML sample (first 2000 chars) for {symbol}:\n{soup.prettify()[:2000]}")
-            return []
+        
+        if not news_items: # אם לא נמצאו עם ה-selector הראשון, נסה גישה רחבה יותר (פחות אידיאלי)
+            logger.debug(f"Primary selector found no news items for {symbol}. Trying broader approach for list items...")
+            # נניח שכל פריט חדשותי נמצא בתוך <li> עם קישור <a> וכותרת <h3>
+            # זה מאוד כללי ויכול לתפוס דברים לא רלוונטיים, אבל לפיילוט זה יכול לעזור להבין את המבנה
+            list_items = soup.find_all('li')
+            potential_news_from_li = []
+            for li_item in list_items:
+                if li_item.find('h3') and li_item.find('a'):
+                    potential_news_from_li.append(li_item)
+            if potential_news_from_li:
+                 logger.info(f"Found {len(potential_news_from_li)} items using broader 'li > h3 > a' search for {symbol}.")
+                 news_items = potential_news_from_li
+            else:
+                logger.warning(f"No news items found on the page for {symbol} even with broader selectors.")
+                logger.debug(f"Page HTML sample (first 3000 chars) for {symbol}:\n{soup.prettify()[:3000]}")
+                return []
 
         logger.info(f"Found {len(news_items)} potential news items for {symbol}.")
 
         for item in news_items:
             title = "N/A"
             link = "N/A"
-            source_name_on_page = "N/A" # המקור כפי שמופיע באתר יאהו
+            source_name_on_page = "N/A"
             publish_date_str = "N/A"
             
             title_tag_h3 = item.find('h3')
@@ -68,16 +72,15 @@ def scrape_yahoo_news_page(symbol: str) -> list[dict]:
             if title_anchor:
                 title = title_anchor.get_text(strip=True)
                 link_raw = title_anchor.get('href', "N/A")
-                # ודא שהקישור הוא אבסולוטי
                 if link_raw.startswith('/'):
                     link = f"https://finance.yahoo.com{link_raw}"
                 else:
                     link = link_raw
-            else: # נסה למצוא קישורים אחרים אם המבנה שונה
+            else: 
                 other_link = item.find('a', href=True)
                 if other_link:
                     title_candidate = other_link.get_text(strip=True)
-                    if len(title_candidate) > 15 : # נניח שכותרת צריכה להיות באורך מסוים
+                    if len(title_candidate) > 15 : 
                          title = title_candidate
                          link_raw = other_link['href']
                          if link_raw.startswith('/'):
@@ -87,13 +90,13 @@ def scrape_yahoo_news_page(symbol: str) -> list[dict]:
                 
             provider_div = item.find('div', class_=lambda x: x and 'StreamSource' in x) 
             if provider_div:
-                source_span = provider_div.find_all('span') # יכולים להיות מספר spans
-                if source_span and len(source_span) > 0:
-                    source_name_on_page = source_span[0].get_text(strip=True) # נניח שהראשון הוא המקור
-                if source_span and len(source_span) > 1: # נניח שהשני הוא התאריך
-                    publish_date_str = source_span[-1].get_text(strip=True) # נסה לקחת את האחרון
+                source_span_tags = provider_div.find_all('span') 
+                if source_span_tags and len(source_span_tags) > 0:
+                    source_name_on_page = source_span_tags[0].get_text(strip=True) 
+                if source_span_tags and len(source_span_tags) > 1: 
+                    publish_date_str = source_span_tags[-1].get_text(strip=True)
 
-            if title != "N/A" and title:
+            if title and title != "N/A": # ודא שיש כותרת והיא לא רק "N/A"
                 collected_articles.append({
                     "symbol_scraped_for": symbol,
                     "title": title,
@@ -103,6 +106,9 @@ def scrape_yahoo_news_page(symbol: str) -> list[dict]:
                     "scrape_timestamp": datetime.now().isoformat()
                 })
                 logger.debug(f"  Collected: '{title[:80]}' from '{source_name_on_page}' dated '{publish_date_str}'")
+            elif title_anchor: # אם מצאנו עוגן אבל לא הצלחנו לחלץ ממנו כותרת תקינה
+                logger.debug(f"  Found an anchor tag but title was problematic: {title_anchor.prettify()[:200]}")
+
 
     except requests.exceptions.HTTPError as http_err:
         logger.error(f"HTTP error occurred for {symbol}: {http_err}")
@@ -122,16 +128,15 @@ if __name__ == "__main__":
         logger.info(f"Successfully scraped {len(articles)} articles for {TEST_SYMBOL}.")
         df = pd.DataFrame(articles)
         
-        # הדפסת התוצאות ללוג (אפשר גם ל-print אם רוצים לראות ב-shell)
-        logger.info("\n--- Scraped Articles DataFrame ---")
-        for index, row in df.iterrows():
+        logger.info("\n--- Scraped Articles DataFrame (first 5) ---")
+        # הדפס את 5 השורות הראשונות ללוג כדי לא להעמיס
+        for index, row in df.head().iterrows(): 
             logger.info(f"Title: {row['title']}, Source: {row['source_name_on_page']}, Date String: {row['publish_date_str']}")
         
         try:
             df.to_csv(OUTPUT_CSV_FILENAME, index=False, encoding='utf-8-sig')
             logger.info(f"Scraped data saved to {OUTPUT_CSV_FILENAME}")
 
-            # --- שליחת הקובץ במייל ---
             if EMAIL_SENDER_AVAILABLE and os.path.exists(OUTPUT_CSV_FILENAME):
                 email_subject = f"Sentibot - Yahoo Archive Scraper Pilot Results ({TEST_SYMBOL})"
                 email_body = (
@@ -155,8 +160,7 @@ if __name__ == "__main__":
                  logger.warning("Email sending is not available (could not import email_sender or settings).")
             elif not os.path.exists(OUTPUT_CSV_FILENAME):
                  logger.warning(f"Output file {OUTPUT_CSV_FILENAME} not found for email attachment.")
-            # --- סוף שליחת המייל ---
-
+            
         except Exception as e_save_email:
             logger.error(f"Error saving CSV or sending email: {e_save_email}")
             
