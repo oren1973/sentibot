@@ -10,3 +10,4 @@ praw
 flask
 schedule
 yfinance
+pandas
