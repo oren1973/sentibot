@@ -18,26 +18,24 @@ except ImportError:
 
 TICKERS = [
     "TSLA", "META", "NVDA", "AMD", "GME", "AMC", "PLTR", "COIN", "BB", "CVNA", 
-    "SPCE", "NKLA", "LCID", "NIO", "XPEV", "RIVN", "MULN", "SOFI", "MARA", 
+    "SPCE", "LCID", "NIO", "XPEV", "RIVN", "MULN", "SOFI", "MARA", 
     "RIOT", "MSTR", "AI", "BBAI", "SOUN", "TLRY", "NVAX", "SAVA", "ENVX", 
-    "EOSE", "DWAC", "FFIE", "ACHR", "CHPT", "SMCI", "UPST", "DKNG", "BYND", 
-    "DNA", "SNDL", "FSR"
+    "EOSE", "ACHR", "CHPT", "SMCI", "UPST", "DKNG", "BYND", 
+    "DNA", "SNDL" # הסרתי את הסמלים הבעייתיים מהרשימה הראשית
 ]
-
-# סמלים שגרמו לשגיאות קודם, נסיר אותם זמנית מהרשימה הראשית
-# או נטפל בהם בנפרד אם רוצים לנסות שוב
-problematic_tickers = ["NKLA", "DWAC", "FFIE", "FSR"]
-TICKERS_TO_DOWNLOAD = [t for t in TICKERS if t not in problematic_tickers]
+# בעבר, הסמלים הבעייתיים היו: "NKLA", "DWAC", "FFIE", "FSR"
+# אם תרצה לנסות אותם שוב, אפשר להוסיף אותם ל-TICKERS
 
 end_date = datetime.now()
-start_date = end_date - timedelta(days=3*365 + 1) # נוסיף יום כדי להבטיח 3 שנים מלאות גם אם "היום" עוד לא נגמר
+# +1 כדי לוודא שאנחנו מקבלים את היום הקודם במלואו אם מריצים באמצע היום
+start_date = end_date - timedelta(days=3*365 + 1) 
 
 start_date_str = start_date.strftime('%Y-%m-%d')
 end_date_str = end_date.strftime('%Y-%m-%d')
 
 output_filename = "historical_prices_sentiment_universe.csv"
 
-main_logger.info(f"Starting download of historical data for {len(TICKERS_TO_DOWNLOAD)} tickers...")
+main_logger.info(f"Starting download of historical data for {len(TICKERS)} tickers...")
 main_logger.info(f"Date range: {start_date_str} to {end_date_str}")
 
 all_stocks_data_df = pd.DataFrame()
@@ -45,117 +43,84 @@ all_stocks_data_df = pd.DataFrame()
 try:
     # הורד נתונים עבור כל הטיקרים בבת אחת
     # yfinance יחזיר DataFrame עם MultiIndex בעמודות: (PriceType, Ticker)
-    # למשל ('Open', 'TSLA'), ('Close', 'TSLA'), ('Open', 'META') וכו'.
-    # האינדקס יהיה התאריכים.
     data = yf.download(
-        tickers=TICKERS_TO_DOWNLOAD,
+        tickers=TICKERS, # השתמש ברשימה המלאה (או המעודכנת)
         start=start_date_str,
         end=end_date_str,
-        group_by='ticker', # זה יארגן את הנתונים לפי טיקר, אבל עדיין יכול להיות מורכב
-        progress=True, # אפשר להפעיל כדי לראות התקדמות אם רוצים
-        threads=True # השתמש במספר threads להורדה מהירה יותר
+        # group_by='ticker', # נסיר את זה, ברירת המחדל טובה יותר לעיבוד הבא
+        progress=True, 
+        threads=True 
     )
 
     if data.empty:
         main_logger.warning("yf.download returned an empty DataFrame. No data retrieved.")
     else:
         main_logger.info(f"Successfully downloaded data block of shape: {data.shape}")
-        
-        # כעת צריך "לשטח" את ה-DataFrame מהפורמט של yfinance (עם MultiIndex בעמודות)
-        # לפורמט הרצוי: Ticker, Date, Open, High, Low, Close, Adj Close, Volume
-        
-        # אם group_by='ticker', אז data.stack(level=0) ואז unstack(level=0) יכול לעזור
-        # או פשוט יותר:
-        # נהפוך את ה-MultiIndex בעמודות ל-DataFrame ארוך (long format) ואז נסדר
-        
-        # תחילה, נבחר רק את העמודות שאנחנו צריכים (Open, High, Low, Close, Adj Close, Volume)
-        # השמות שלהן יהיו ב-level 0 של ה-MultiIndex בעמודות
-        columns_to_keep = ['Open', 'High', 'Low', 'Close', 'Adj Close', 'Volume']
-        
-        # נסנן את ה-DataFrame כך שיכיל רק את העמודות האלה עבור כל הטיקרים
-        # זה יכול להיות מסובך אם יש טיקרים שנכשלו ולא החזירו את כל העמודות
-        
-        # גישה פשוטה יותר: נעבור על כל טיקר ונחלץ את הנתונים שלו
-        processed_data_list = []
-        for ticker in TICKERS_TO_DOWNLOAD:
-            try:
-                # נסה לגשת לנתונים של הטיקר הספציפי
-                # אם group_by='ticker', הגישה היא data[ticker]
-                # אם לא, ה-DataFrame יכול להיות עם עמודות כמו ('Open', 'AAPL'), ('Close', 'AAPL')
-                if ticker in data.columns.levels[0]: # אם group_by='ticker' שימש
-                    ticker_df = data[ticker].copy()
-                elif (columns_to_keep[0], ticker) in data.columns: # אם הפורמט הוא (PriceType, Ticker)
-                     ticker_df = data.xs(ticker, level=1, axis=1)[columns_to_keep].copy()
-                else: # גישה אחרת אם הפורמט שונה (למשל, yfinance לא מקבץ לפי טיקר)
-                    # נניח שהעמודות הן ('Open', ticker), ('High', ticker) וכו'.
-                    # נבדוק אם לטיקר יש נתונים
-                    if any((col_type, ticker) in data.columns for col_type in columns_to_keep):
-                        # בחר רק את העמודות הרלוונטיות לטיקר זה
-                        ticker_specific_cols = [(col_type, t) for col_type in columns_to_keep for t in [ticker] if (col_type,t) in data.columns]
-                        if not ticker_specific_cols:
-                            main_logger.warning(f"No data columns found for {ticker} in the downloaded block.")
-                            continue
-                        
-                        ticker_df = data[ticker_specific_cols]
-                        # שנה שמות עמודות מ-MultiIndex ל-SingleIndex
-                        ticker_df.columns = [col[0] for col in ticker_df.columns]
-                    else: # נסה לגשת כאילו הנתונים של טיקר בודד הם ה-DataFrame כולו
-                        if ticker in data.columns.get_level_values(0): # אם יש MultiIndex והטיקר הוא ברמה הראשונה
-                           ticker_df = data[ticker]
-                        elif isinstance(data.columns, pd.MultiIndex) and ticker in data.columns.get_level_values(1): # אם הטיקר ברמה השנייה
-                            ticker_df = data.xs(ticker, level=1, axis=1).copy()
-                            ticker_df = ticker_df[columns_to_keep]
-                        else: # אם אין MultiIndex והטיקרים מעורבבים (פחות סביר ל-yf.download של רשימה)
-                            main_logger.warning(f"Could not reliably extract data for {ticker} from the downloaded block structure.")
-                            continue
+        main_logger.debug(f"Sample of downloaded data columns: {data.columns[:10]}") # הצג דוגמה לעמודות
 
-
-                if not ticker_df.empty:
-                    ticker_df = ticker_df[columns_to_keep] # ודא שיש רק את העמודות הרצויות
-                    ticker_df['Ticker'] = ticker
-                    ticker_df.reset_index(inplace=True) # הפוך את 'Date' לעמודה
-                    processed_data_list.append(ticker_df)
-                    main_logger.info(f"  Processed data for {ticker} ({len(ticker_df)} rows).")
-                else:
-                    main_logger.warning(f"  No data extracted for {ticker} after attempting to structure.")
-            except KeyError:
-                main_logger.warning(f"  Ticker {ticker} not found in the downloaded data columns. Skipping.")
-            except Exception as e_proc:
-                main_logger.error(f"  Error processing data for {ticker}: {e_proc}")
+        # --- עיבוד ה-DataFrame עם MultiIndex ---
+        # הרמה העליונה של העמודות היא סוג הנתון (Adj Close, Close, High, Low, Open, Volume)
+        # הרמה התחתונה היא הטיקר
         
-        if processed_data_list:
-            all_stocks_data_df = pd.concat(processed_data_list, ignore_index=True)
-            main_logger.info(f"Successfully processed and combined data for {len(all_stocks_data_df['Ticker'].unique())} tickers.")
+        # השתמש ב-stack() כדי להעביר את רמת הטיקרים מהעמודות לאינדקס
+        data_stacked = data.stack(level=1) # מעביר את הרמה השנייה (טיקרים) לאינדקס
+        
+        if data_stacked.empty:
+            main_logger.warning("DataFrame became empty after stacking. Check download structure.")
         else:
-            main_logger.warning("No data was successfully processed from the downloaded block.")
-
+            # כעת האינדקס הוא (Date, Ticker) והעמודות הן (Adj Close, Close, ...)
+            # אפס את האינדקס כדי שהתאריך והטיקר יהפכו לעמודות רגילות
+            data_reset = data_stacked.reset_index()
+            
+            # שנה שמות עמודות אם צריך (בדרך כלל השמות כבר תקינים)
+            # data_reset.rename(columns={'level_1': 'Ticker', 'Date': 'Date'}, inplace=True)
+            # השם של עמודת הטיקר אחרי stack עשוי להיות 'Ticker' או 'Symbols' או משהו אחר, תלוי בגרסת yfinance
+            # נבדוק איך לקרוא לה נכון:
+            if 'Ticker' in data_reset.columns:
+                pass # השם כבר 'Ticker'
+            elif 'Symbols' in data_reset.columns: # שם נפוץ אחר
+                data_reset.rename(columns={'Symbols': 'Ticker'}, inplace=True)
+            else: # נסה למצוא את עמודת הטיקר (זו שלא 'Date' ולא סוגי מחיר)
+                potential_ticker_cols = [col for col in data_reset.columns if col not in ['Date', 'Open', 'High', 'Low', 'Close', 'Adj Close', 'Volume']]
+                if len(potential_ticker_cols) == 1:
+                    main_logger.info(f"Renaming ticker column from '{potential_ticker_cols[0]}' to 'Ticker'.")
+                    data_reset.rename(columns={potential_ticker_cols[0]: 'Ticker'}, inplace=True)
+                else:
+                    main_logger.error(f"Could not reliably identify the ticker column after stacking. Columns found: {data_reset.columns.tolist()}")
+            
+            all_stocks_data_df = data_reset
+            main_logger.info(f"Successfully processed and combined data. Shape of final DataFrame: {all_stocks_data_df.shape}")
+            main_logger.debug(f"Sample of final DataFrame head:\n{all_stocks_data_df.head()}")
 
 except Exception as e:
-    main_logger.error(f"An critical error occurred during yf.download or initial data processing: {e}", exc_info=True)
+    main_logger.error(f"An critical error occurred during yf.download or data processing: {e}", exc_info=True)
 
 
 if not all_stocks_data_df.empty:
     desired_columns_order = ['Ticker', 'Date', 'Open', 'High', 'Low', 'Close', 'Adj Close', 'Volume']
-    # ודא שכל העמודות הרצויות קיימות לפני סידור מחדש, והוסף עמודות חסרות עם NaN אם צריך
+    
+    # ודא שכל העמודות הרצויות קיימות, אחרת הוסף אותן עם NA
     for col in desired_columns_order:
         if col not in all_stocks_data_df.columns:
             all_stocks_data_df[col] = pd.NA 
-            main_logger.warning(f"Column '{col}' was missing, added with NAs.")
+            main_logger.warning(f"Column '{col}' was missing in the final DataFrame, added with NAs. This might indicate issues with specific tickers during download/processing.")
             
     all_stocks_data_df = all_stocks_data_df[desired_columns_order]
 
     try:
-        all_stocks_data_df.to_csv(output_filename, index=False, encoding='utf-8-sig')
+        all_stocks_data_df.to_csv(output_filename, index=False, encoding='utf-8-sig', date_format='%Y-%m-%d') # הוספתי date_format
         main_logger.info(f"\nHistorical data for all tickers saved to: {output_filename}")
         main_logger.info(f"Total rows in combined CSV: {len(all_stocks_data_df)}")
 
         if EMAIL_SENDER_AVAILABLE:
-            email_subject = f"Sentibot - Historical Prices Data ({end_date_str})"
+            email_subject = f"Sentibot - Historical Prices Data ({datetime.now().strftime('%Y-%m-%d')})" # השתמש בתאריך הנוכחי
             email_body = (
-                f"Historical price data collection finished for {len(TICKERS_TO_DOWNLOAD)} tickers.\n"
+                f"Historical price data collection finished.\n"
+                f"Tickers attempted: {len(TICKERS)}\n"
                 f"Date range: {start_date_str} to {end_date_str}.\n\n"
                 f"The data is attached as '{output_filename}'.\n\n"
-                f"Total rows: {len(all_stocks_data_df)}\n\n"
+                f"Total rows in CSV: {len(all_stocks_data_df)}\n"
+                f"Unique tickers in CSV: {all_stocks_data_df['Ticker'].nunique()}\n\n"
                 f"Sentibot"
             )
             
