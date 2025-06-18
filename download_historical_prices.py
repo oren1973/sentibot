@@ -1,26 +1,21 @@
 import yfinance as yf
 import pandas as pd
 from datetime import datetime, timedelta
-import time # לשליטה על קצב הבקשות
-import os # נוסף עבור בדיקת קיום קובץ ושליפת שם קובץ
+import time 
+import os 
 
-# נניח ש-email_sender.py ו-settings.py נמצאים באותו project root
-# או שהם ניתנים לייבוא בסביבת ההרצה.
-# אם יש בעיית ייבוא, ייתכן שנצטרך להתאים את נתיבי הייבוא או להעתיק קוד.
 try:
-    from email_sender import send_email # מייבאים את הפונקציה הגנרית
-    from settings import setup_logger # מייבאים את הלוגר אם רוצים להשתמש בו גם כאן
+    from email_sender import send_email 
+    from settings import setup_logger 
     EMAIL_SENDER_AVAILABLE = True
-    main_logger = setup_logger("PriceDownloader") # לוגר ייעודי לסקריפט הזה
+    main_logger = setup_logger("PriceDownloader") 
 except ImportError:
     EMAIL_SENDER_AVAILABLE = False
-    # לוגר בסיסי אם settings לא זמין
     import logging
     logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
     main_logger = logging.getLogger("PriceDownloader_Fallback")
     main_logger.warning("Could not import from email_sender or settings. Email functionality will be disabled.")
 
-# רשימת הסמלים מהמסמך
 TICKERS = [
     "TSLA", "META", "NVDA", "AMD", "GME", "AMC", "PLTR", "COIN", "BB", "CVNA", 
     "SPCE", "NKLA", "LCID", "NIO", "XPEV", "RIVN", "MULN", "SOFI", "MARA", 
@@ -29,7 +24,6 @@ TICKERS = [
     "DNA", "SNDL", "FSR"
 ]
 
-# הגדרת טווח התאריכים
 end_date = datetime.now()
 start_date = end_date - timedelta(days=3*365) 
 
@@ -37,7 +31,7 @@ start_date_str = start_date.strftime('%Y-%m-%d')
 end_date_str = end_date.strftime('%Y-%m-%d')
 
 all_stocks_data = pd.DataFrame()
-output_filename = "historical_prices_sentiment_universe.csv" # שם קובץ הפלט
+output_filename = "historical_prices_sentiment_universe.csv"
 
 main_logger.info(f"Starting download of historical data for {len(TICKERS)} tickers...")
 main_logger.info(f"Date range: {start_date_str} to {end_date_str}")
@@ -45,14 +39,16 @@ main_logger.info(f"Date range: {start_date_str} to {end_date_str}")
 for i, ticker_symbol in enumerate(TICKERS):
     main_logger.info(f"\nProcessing ticker {i+1}/{len(TICKERS)}: {ticker_symbol}")
     try:
+        # הורדת נתונים עבור הסמל הנוכחי
+        # הסרנו את show_errors=True
         ticker_data = yf.download(ticker_symbol, 
                                   start=start_date_str, 
                                   end=end_date_str,
-                                  progress=False, 
-                                  show_errors=True)
+                                  progress=False) # progress=False זה בסדר
 
         if ticker_data.empty:
-            main_logger.warning(f"  No data found for {ticker_symbol} in the given date range.")
+            main_logger.warning(f"  No data found for {ticker_symbol} in the given date range by yfinance.")
+            # yfinance ידפיס שגיאות רלוונטיות אם יש בעיה עם הסמל
             continue
 
         ticker_data['Ticker'] = ticker_symbol
@@ -66,7 +62,8 @@ for i, ticker_symbol in enumerate(TICKERS):
         main_logger.info(f"  Successfully downloaded {len(ticker_data)} data points for {ticker_symbol}.")
 
     except Exception as e:
-        main_logger.error(f"  An error occurred while downloading data for {ticker_symbol}: {e}")
+        # שגיאות כלליות יותר שלא נתפסו על ידי yfinance עצמו
+        main_logger.error(f"  An unexpected error occurred while processing {ticker_symbol}: {e}")
     
     time.sleep(0.5) 
 
@@ -80,12 +77,7 @@ if not all_stocks_data.empty:
         main_logger.info(f"\nHistorical data for all tickers saved to: {output_filename}")
         main_logger.info(f"Total rows in combined CSV: {len(all_stocks_data)}")
 
-        # --- שליחת הקובץ במייל ---
         if EMAIL_SENDER_AVAILABLE:
-            # המשתנים EMAIL_USER, EMAIL_PASS, EMAIL_RECEIVER צריכים להיות מוגדרים כמשתני סביבה
-            # או ש- send_email יקרא אותם מ-settings.py אם הוא מיובא משם.
-            # פונקציית send_email שלך כבר מטפלת בבדיקת המשתנים האלה.
-            
             email_subject = f"Sentibot - Historical Prices Data ({end_date_str})"
             email_body = (
                 f"Historical price data collection finished for {len(TICKERS)} tickers.\n"
@@ -95,13 +87,10 @@ if not all_stocks_data.empty:
                 f"Sentibot"
             )
             
-            # כאן נשתמש בפונקציה send_email הגנרית שלך
-            # היא צריכה לקבל attachment_paths כרשימה
             email_sent = send_email(
                 subject=email_subject,
                 body=email_body,
-                # receiver_email יילקח מ-os.getenv("EMAIL_RECEIVER") בתוך send_email
-                attachment_paths=[output_filename] # שלח את הקובץ שיצרנו
+                attachment_paths=[output_filename] 
             )
 
             if email_sent:
@@ -109,8 +98,7 @@ if not all_stocks_data.empty:
             else:
                 main_logger.error(f"Failed to send email with historical prices CSV. Check email configurations and logs from email_sender.")
         else:
-            main_logger.warning("Email sending is not available (could not import email_sender or settings). Please retrieve the file manually.")
-        # --- סוף שליחת המייל ---
+            main_logger.warning("Email sending is not available. Please retrieve the file manually if run in cloud.")
 
     except Exception as e_save:
         main_logger.error(f"Error saving data to CSV: {e_save}")
