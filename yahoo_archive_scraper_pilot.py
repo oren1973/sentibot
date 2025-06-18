@@ -18,55 +18,84 @@ except ImportError:
     logger.warning("Could not import from email_sender or settings for pilot. Email functionality will be disabled if run in cloud without env vars.")
 
 TEST_SYMBOL = "AAPL" 
-# ודא שאין לוכסן בסוף התבנית
-YAHOO_NEWS_URL_TEMPLATE = "https://finance.yahoo.com/quote/{symbol}/news" # <--- ה-URL הנכון
+YAHOO_NEWS_URL_TEMPLATE = "https://finance.yahoo.com/quote/{symbol}/news"
 OUTPUT_CSV_FILENAME = f"yahoo_scraped_pilot_{TEST_SYMBOL}.csv"
+
+# --- ערכי העוגיות שסיפקת ---
+EUCONSENT_VALUE = "CQTNA8AQTNA8AAOACBHEBvFoAP_gAEPgACiQKptB9G7WTXFneTp2YPskOYwX0VBJ4MAwBgCBAcABzBIUIBwGVmAzJEyIICACGAIAIGBBIABtGAhAQEAAYIAFAABIAEgAIBAAIGAAACAAAABACAAAAAAAAAAQgEAXMBQgmCYEBFoIQUhAggAgAQAAAAAEAIgBCAQAEAAAQAAACAAIACgAAgAAAAAAAAAEAFAIEAAAIAECAgPkdAAAAAAAAAAIAAYACAABAAAAAIKpgAkGhUQRFgQAhEIGEECAAQUBABQIAgAACBAAAATBAUIAwAVGAiAEAIAAAAAAAAAAABAAABAAhAAEAAQIAAAAAIAAgAIBAAACAAAAAAAAAAAAAAAAAAAAAAAAAGIBAggCAABBAAQUAAAAAgAAAAAAAAAIgACAAAAAAAAAAAAAAIgAAAAAAAAAAAAAAAAAAIEAAAIAAAAoDEFgAAAAAAAAAAAAAACAABAAAAAIAAA"
+GUC_VALUE = "AQABCAFoVBBofkIfRgSY&s=AQAAAB405PQD&g=aFLHVw"
+GUCS_VALUE = "AX9tHvLB"
+
+# הרכבת מחרוזת העוגיות - נתחיל עם EuConsent ו-GUCS
+# הוספתי גם את GUC למקרה ששלושתן יחד יעבדו טוב יותר.
+# סדר העוגיות בדרך כלל לא קריטי, אבל לפעמים כן.
+COOKIE_STRING = f"EuConsent={EUCONSENT_VALUE}; GUCS={GUCS_VALUE}; GUC={GUC_VALUE}"
+# אם זה לא עובד, נוכל לנסות רק EuConsent ו-GUCS:
+# COOKIE_STRING = f"EuConsent={EUCONSENT_VALUE}; GUCS={GUCS_VALUE}"
+# או רק EuConsent:
+# COOKIE_STRING = f"EuConsent={EUCONSENT_VALUE}"
 
 HEADERS = {
     'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
     'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,image/apng,*/*;q=0.8',
-    'Accept-Language': 'en-US,en;q=0.9',
-    'Connection': 'keep-alive'
+    'Accept-Language': 'en-US,en;q=0.9', 
+    'Connection': 'keep-alive',
+    'Cookie': COOKIE_STRING 
 }
+# ------------------------------------
 
 def scrape_yahoo_news_page(symbol: str) -> list[dict]:
-    url = YAHOO_NEWS_URL_TEMPLATE.format(symbol=symbol) # שימוש ב-format() לבניית ה-URL
-    logger.info(f"Attempting to scrape: {url}")
+    url = YAHOO_NEWS_URL_TEMPLATE.format(symbol=symbol) 
+    logger.info(f"Attempting to scrape: {url} with custom cookies.")
+    logger.debug(f"Using Cookies string: {HEADERS.get('Cookie', 'None')}")
     
     collected_articles = []
 
     try:
-        # נסה עם verify=False אם יש בעיות SSL, למרות שלא סביר כאן
-        response = requests.get(url, headers=HEADERS, timeout=30) # הגדלתי timeout
+        response = requests.get(url, headers=HEADERS, timeout=30) 
         logger.info(f"Response status code for {url}: {response.status_code}")
+        
+        # בדוק אם הכותרת של הדף היא עדיין דף ההסכמה
+        # התאמתי את הבדיקה שתהיה רגישה פחות לאותיות גדולות/קטנות ותכסה גם אנגלית
+        page_title_lower = ""
+        if response.content: # ודא שיש תוכן לפני ניסיון לנתח אותו
+            temp_soup = BeautifulSoup(response.content, 'html.parser', from_encoding=response.encoding)
+            if temp_soup.title and temp_soup.title.string:
+                page_title_lower = temp_soup.title.string.lower()
+        
+        if "yahoo ist teil der yahoo-markenfamilie" in page_title_lower or \
+           "yahoo is part of the yahoo family of brands" in page_title_lower or \
+           "consent.yahoo.com" in response.url.lower(): # בדוק גם אם ה-URL הסופי הוא דף ההסכמה
+            logger.error(f"Still getting the consent page for {symbol}, even with cookies. Cookies might be incorrect, insufficient, or the wrong ones.")
+            logger.debug(f"Consent page URL: {response.url}")
+            logger.debug(f"Consent page Title: {page_title_lower}")
+            logger.debug(f"Consent page HTML sample (first 1000 chars) for {symbol}:\n{response.text[:1000]}")
+            return [] 
+
         response.raise_for_status() 
         
-        soup = BeautifulSoup(response.content, 'html.parser')
+        soup = BeautifulSoup(response.content, 'html.parser', from_encoding=response.encoding)
         
-        # --- ניסיונות מרובים למצוא פריטי חדשות ---
         news_items = []
+        # ניסיון 1: חיפוש ה-ul שמכיל את החדשות
+        fin_stream_ul = soup.find('ul', id=lambda x: x and x.startswith('FinStream'))
+        if fin_stream_ul:
+            potential_items_v1 = fin_stream_ul.find_all('li', class_=lambda x: x and 'StreamItem' in x, recursive=False)
+            if potential_items_v1:
+                logger.debug(f"Found {len(potential_items_v1)} items using 'ul#FinStream... > li.StreamItem'")
+                news_items.extend(potential_items_v1)
         
-        # ניסיון 1: Selector שהיה נפוץ בעבר (קונטיינר FinStream)
-        # פריטים נמצאים בתוך <li class="js-stream-content Pos(r)">
-        potential_items_v1 = soup.select('div#Fin-Stream ul > li.js-stream-content')
-        if potential_items_v1:
-            logger.debug(f"Found {len(potential_items_v1)} items using 'div#Fin-Stream ul > li.js-stream-content'")
-            news_items.extend(potential_items_v1)
-
-        # ניסיון 2: Selector שהופיע בלוגיקה הקודמת שלך (יותר כללי)
-        if not news_items:
+        if not news_items: # אם לא נמצאו עם ה-selector הראשון, נסה גישה רחבה יותר
             potential_items_v2 = soup.find_all('li', class_=lambda x: x and 'StreamItem' in x and 'QuoteNews' in x)
             if potential_items_v2:
-                logger.debug(f"Found {len(potential_items_v2)} items using 'li.StreamItem.QuoteNews'")
+                logger.debug(f"Found {len(potential_items_v2)} items using broader 'li.StreamItem.QuoteNews'")
                 news_items.extend(potential_items_v2)
 
-        # ניסיון 3: חיפוש כללי יותר של קישורים עם כותרות בתוכם
         if not news_items:
             logger.debug("No items from specific selectors, trying broader search for <a> tags with <h3>...")
-            links_with_h3 = soup.select('a > h3') # הרבה פעמים כותרות הן h3 בתוך a
+            links_with_h3 = soup.select('a > h3') 
             if links_with_h3:
                  logger.debug(f"Found {len(links_with_h3)} <a><h3> candidates.")
-                 # נצטרך לעלות ל-parent כדי לקבל את כל ה-item
                  news_items.extend([link.parent.parent for link in links_with_h3 if link.parent and link.parent.parent])
 
 
@@ -77,7 +106,7 @@ def scrape_yahoo_news_page(symbol: str) -> list[dict]:
 
         logger.info(f"Found a total of {len(news_items)} potential news items for {symbol} using combined selectors.")
 
-        processed_titles = set() # למניעת כפילויות אם selectors שונים תופסים אותו פריט
+        processed_titles = set() 
 
         for item_idx, item in enumerate(news_items):
             title = "N/A"
@@ -85,13 +114,13 @@ def scrape_yahoo_news_page(symbol: str) -> list[dict]:
             source_name_on_page = "N/A"
             publish_date_str = "N/A"
             
-            # חילוץ כותרת וקישור - נסה מספר דרכים
-            title_anchor = item.find('a', href=True) # חפש את הקישור הראשי בתוך ה-item
+            title_anchor = item.find('a', href=True) 
             if title_anchor:
-                title_candidate_h3 = title_anchor.find('h3')
-                if title_candidate_h3:
-                    title = title_candidate_h3.get_text(strip=True)
-                else: # אם אין h3, נסה לקחת את הטקסט של הקישור עצמו
+                # חפש כותרת בתוך תגיות h3 או div עם class מתאים בתוך הקישור
+                title_h3 = title_anchor.find('h3')
+                if title_h3:
+                    title = title_h3.get_text(strip=True)
+                else: # נסה לקחת את הטקסט של הקישור עצמו אם אין h3
                     title = title_anchor.get_text(strip=True)
                 
                 link_raw = title_anchor.get('href', "N/A")
@@ -100,31 +129,36 @@ def scrape_yahoo_news_page(symbol: str) -> list[dict]:
                 elif link_raw.startswith('http'):
                     link = link_raw
             
-            if not title or title == "N/A" or len(title) < 10: # אם לא מצאנו כותרת טובה מהקישור
-                h3_tag = item.find('h3') # נסה למצוא h3 כלשהו
+            # אם לא מצאנו כותרת טובה מהקישור, נסה למצוא h3 כלשהו ב-item
+            if not title or title == "N/A" or len(title) < 10: 
+                h3_tag = item.find('h3') 
                 if h3_tag:
                     title = h3_tag.get_text(strip=True)
-                # אפשר להוסיף עוד ניסיונות אם צריך
-
-            # חילוץ מקור ותאריך
-            # המבנה יכול להיות: <div class="..."><span class="source">Reuters</span><span class="time">2 hours ago</span></div>
-            # או <div class="..."><span class="provider">Yahoo Finance</span><span>June 18, 2025</span></div>
-            meta_info_container = item.find('div', class_=lambda x: x and ('Fz(12px)' in x or 'Meta' in x or 'StreamSource' in x))
+            
+            # חילוץ מקור ותאריך (זה החלק הכי שביר בד"כ)
+            # המבנה יכול להשתנות, ננסה כמה אפשרויות
+            meta_info_container = item.find('div', class_=lambda x: x and ('Fz(12px)' in x or 'Meta' in x or 'StreamSource' in x or 'C(#959595)' in x))
             if meta_info_container:
-                spans = meta_info_container.find_all('span', recursive=False) # רק ילדים ישירים
+                spans = meta_info_container.find_all('span', recursive=False) 
+                divs_for_source = meta_info_container.find_all('div', recursive=False) # לפעמים המקור ב-div
+
                 if spans:
-                    if len(spans) >= 1:
+                    if len(spans) >= 1 and not source_name_on_page != "N/A": # אם עוד לא מצאנו מקור
                         source_name_on_page = spans[0].get_text(strip=True)
-                    if len(spans) >= 2: # נניח שהתאריך הוא השני אם יש שניים
-                        publish_date_str = spans[1].get_text(strip=True)
+                    if len(spans) >= 2: 
+                        publish_date_str = spans[-1].get_text(strip=True) # נניח שהאחרון הוא התאריך
                     elif len(spans) == 1: # אם יש רק אחד, זה יכול להיות תאריך או מקור
-                        # ננסה לזהות אם זה נראה כמו תאריך
                         text_content = spans[0].get_text(strip=True)
-                        if any(kw in text_content.lower() for kw in ['ago', 'yesterday', 'min', 'hour']) or \
-                           any(month in text_content for month in ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec']):
+                        if any(kw in text_content.lower() for kw in ['ago', 'yesterday', 'min', 'hour', 'today']) or \
+                           any(month.lower() in text_content.lower() for month in ['jan','feb','mar','apr','may','jun','jul','aug','sep','oct','nov','dec']):
                             publish_date_str = text_content
-                        else: # נניח שזה המקור
+                        elif source_name_on_page == "N/A": # אם זה לא נראה כמו תאריך, אולי זה המקור
                             source_name_on_page = text_content
+                elif divs_for_source: # אם המקור/תאריך נמצאים ב-divs
+                     if len(divs_for_source) >= 1 and source_name_on_page == "N/A":
+                        source_name_on_page = divs_for_source[0].get_text(strip=True)
+                     if len(divs_for_source) >=2:
+                        publish_date_str = divs_for_source[-1].get_text(strip=True)
 
 
             if title and title != "N/A" and len(title) >= 10 and title.lower() not in processed_titles:
@@ -144,7 +178,9 @@ def scrape_yahoo_news_page(symbol: str) -> list[dict]:
 
     except requests.exceptions.HTTPError as http_err:
         logger.error(f"HTTP error occurred for {symbol} at {url}: {http_err}")
-        logger.debug(f"Response content for HTTP error: {response.text[:500] if response else 'No response'}")
+        # חשוב: בדוק אם response מוגדר לפני גישה אליו
+        if 'response' in locals() and response is not None:
+            logger.debug(f"Response content for HTTP error: {response.text[:500] if response.text else 'No response text'}")
     except requests.exceptions.RequestException as req_err:
         logger.error(f"Request error occurred for {symbol} at {url}: {req_err}")
     except Exception as e:
