@@ -2,15 +2,16 @@ import pandas as pd
 import os
 import logging
 from datetime import datetime, timedelta
-from pandas.tseries.offsets import BDay # לחישוב ימי עסקים
-import numpy as np # עבור חישובים מספריים
+from pandas.tseries.offsets import BDay 
+import numpy as np 
+import requests 
 
-# --- נסיונות ייבוא ---
+# --- הגדרות ---
 EMAIL_SENDER_AVAILABLE = False
 SENTIMENT_ANALYZER_AVAILABLE = False
 try:
     from email_sender import send_email
-    from settings import setup_logger, MIN_HEADLINE_LENGTH # MIN_HEADLINE_LENGTH לא בשימוש ישיר כאן
+    from settings import setup_logger
     EMAIL_SENDER_AVAILABLE = True
     logger = setup_logger("CreateBacktestDataset", level=logging.INFO)
 except ImportError:
@@ -19,24 +20,48 @@ except ImportError:
     logger.warning("Could not import from email_sender or settings. Email/advanced logging functionality may be limited.")
 
 try:
-    from sentiment_analyzer import analyze_sentiment # הפונקציה שלך מ-VADER
+    from sentiment_analyzer import analyze_sentiment 
     SENTIMENT_ANALYZER_AVAILABLE = True
     logger.info("Sentiment analyzer imported successfully.")
 except ImportError:
-    logger.error("Could not import 'analyze_sentiment' from sentiment_analyzer.py. Sentiment analysis will not be performed.")
-    # פונקציית דמה אם המקורית לא זמינה, כדי שהסקריפט לא ייכשל לגמרי
+    logger.error("Could not import 'analyze_sentiment' from sentiment_analyzer.py. Sentiment analysis will assign default scores.")
     def analyze_sentiment(text, source_name=None): return 0.0 
 
-# --- שמות קבצי קלט ופלט ---
-# !!! שנה את שם הקובץ של הרדיט לשם המדויק שלך !!!
-REDDIT_PROCESSED_DATA_CSV = "reddit_processed_daily_text_20250619.csv" # <--- שנה לשם הקובץ שלך!
-HISTORICAL_PRICES_CSV = "historical_prices_sentiment_universe.csv"
+# --- קישורים לקבצים ב-Google Drive (מעודכנים לפי מה ששלחת) ---
+# קובץ מחירי המניות ההיסטוריים
+PRICES_FILE_ID = "1D6mQpdzjWB3vmAaHgKFwTcIobtw4-vrf" # <--- ה-ID של historical_prices_sentiment_universe (2)
+PRICES_GOOGLE_DRIVE_URL = f"https://drive.google.com/uc?export=download&id={PRICES_FILE_ID}"
+LOCAL_PRICES_CSV_PATH = "downloaded_historical_prices.csv"
+
+# קובץ הרדיט המעובד
+REDDIT_FILE_ID = "1U-PAdgwwTpShr9DiiEisOA1T-ht3_YWg" # <--- ה-ID של reddit_processed_daily_text_20250619
+REDDIT_GOOGLE_DRIVE_URL = f"https://drive.google.com/uc?export=download&id={REDDIT_FILE_ID}"
+LOCAL_REDDIT_PROCESSED_CSV_PATH = "downloaded_reddit_processed_daily.csv"
+
+# --- שם קובץ הפלט הסופי ---
 FINAL_BACKTEST_DATASET_CSV = f"backtesting_dataset_v1_{datetime.now().strftime('%Y%m%d')}.csv"
 
 # --- פרמטרים לחישוב תשואות עתידיות ---
-# נחשב תשואה אם קונים בפתיחה של היום שאחרי ההחלטה (t+1) ומוכרים בסגירה של t+N
-# N ימי עסקים קדימה לחישוב תשואות
 FUTURE_RETURN_DAYS = [1, 2, 3, 5, 10] 
+
+def download_file_from_google_drive(file_id: str, destination: str, file_description: str):
+    logger.info(f"Attempting to download {file_description} from Google Drive (ID: {file_id}) to {destination}...")
+    url = f"https://drive.google.com/uc?export=download&id={file_id}"
+    try:
+        response = requests.get(url, stream=True, timeout=120) 
+        response.raise_for_status()
+        with open(destination, 'wb') as f:
+            for chunk in response.iter_content(chunk_size=81920): 
+                f.write(chunk)
+        download_size_mb = os.path.getsize(destination)/(1024*1024) if os.path.exists(destination) else 0
+        logger.info(f"{file_description} downloaded successfully to {destination} ({download_size_mb:.2f} MB).")
+        return True
+    except requests.exceptions.RequestException as e:
+        logger.error(f"Error downloading {file_description}: {e}")
+        return False
+    except Exception as e:
+        logger.error(f"An unexpected error occurred during download of {file_description}: {e}")
+        return False
 
 def load_and_prepare_reddit_data(filepath: str) -> pd.DataFrame:
     logger.info(f"Loading processed Reddit data from: {filepath}")
@@ -46,11 +71,17 @@ def load_and_prepare_reddit_data(filepath: str) -> pd.DataFrame:
     try:
         df = pd.read_csv(filepath)
         df['Date'] = pd.to_datetime(df['Date'], errors='coerce')
+        required_cols = ['Date', 'Ticker', 'combined_reddit_text_for_day', 'num_relevant_posts_today', 'avg_score_today', 'avg_num_comments_today']
+        missing_cols = [col for col in required_cols if col not in df.columns]
+        if missing_cols:
+            logger.error(f"Missing required columns in Reddit data: {missing_cols}. Cannot proceed.")
+            return pd.DataFrame()
+            
         df.dropna(subset=['Date', 'Ticker', 'combined_reddit_text_for_day'], inplace=True)
-        logger.info(f"Loaded {len(df)} rows from processed Reddit data.")
+        logger.info(f"Loaded {len(df)} valid rows from processed Reddit data.")
         return df
     except Exception as e:
-        logger.error(f"Error loading processed Reddit data: {e}", exc_info=True)
+        logger.error(f"Error loading processed Reddit data from {filepath}: {e}", exc_info=True)
         return pd.DataFrame()
 
 def load_and_prepare_price_data(filepath: str) -> pd.DataFrame:
@@ -61,188 +92,149 @@ def load_and_prepare_price_data(filepath: str) -> pd.DataFrame:
     try:
         df = pd.read_csv(filepath)
         df['Date'] = pd.to_datetime(df['Date'], errors='coerce')
-        # ודא שהעמודות הנדרשות קיימות
         required_cols = ['Date', 'Ticker', 'Open', 'Close', 'High', 'Low', 'Volume']
-        for col in required_cols:
-            if col not in df.columns:
-                logger.error(f"Required column '{col}' missing in price data. Aborting.")
-                return pd.DataFrame()
+        missing_cols = [col for col in required_cols if col not in df.columns]
+        if missing_cols:
+            logger.error(f"Missing required columns in Price data: {missing_cols}. Cannot proceed.")
+            return pd.DataFrame()
+
         df.dropna(subset=required_cols, inplace=True)
-        logger.info(f"Loaded {len(df)} rows from historical price data.")
+        logger.info(f"Loaded {len(df)} valid rows from historical price data.")
         return df
     except Exception as e:
-        logger.error(f"Error loading historical price data: {e}", exc_info=True)
+        logger.error(f"Error loading historical price data from {filepath}: {e}", exc_info=True)
         return pd.DataFrame()
 
 def calculate_sentiment_scores(df_reddit: pd.DataFrame) -> pd.DataFrame:
     if not SENTIMENT_ANALYZER_AVAILABLE:
-        logger.warning("Sentiment analyzer not available. Skipping sentiment score calculation.")
-        df_reddit['avg_daily_reddit_sentiment'] = 0.0 # ערך דמה
+        logger.warning("Sentiment analyzer not available. Assigning default sentiment score 0.0.")
+        df_reddit['avg_daily_reddit_sentiment'] = 0.0
         return df_reddit
     
+    if 'combined_reddit_text_for_day' not in df_reddit.columns:
+        logger.error("'combined_reddit_text_for_day' column missing. Cannot calculate sentiment.")
+        df_reddit['avg_daily_reddit_sentiment'] = 0.0
+        return df_reddit
+
     logger.info(f"Calculating sentiment scores for {len(df_reddit)} Reddit daily texts...")
-    sentiments = []
-    for index, row in df_reddit.iterrows():
-        if (index + 1) % 100 == 0: # הדפס התקדמות כל 100 שורות
-            logger.info(f"  Processed {index+1}/{len(df_reddit)} sentiment calculations...")
-        # כאן אנחנו מנתחים את הטקסט המאוחד.
-        # פונקציית analyze_sentiment שלך יכולה לקבל source_name.
-        # מכיוון שהטקסט הוא כבר מאוחד מרדיט, אפשר להעביר "Reddit_Combined" או לא להעביר כלל,
-        # תלוי אם יש לך משקלים ספציפיים לזה ב-NEWS_SOURCES_CONFIG.
-        # אם אין, VADER יפעל כרגיל.
-        sentiment = analyze_sentiment(text=row['combined_reddit_text_for_day'], source_name="Reddit_Combined")
-        sentiments.append(sentiment)
-    
-    df_reddit['avg_daily_reddit_sentiment'] = sentiments
+    df_reddit['avg_daily_reddit_sentiment'] = df_reddit['combined_reddit_text_for_day'].apply(
+        lambda text: analyze_sentiment(text=str(text), source_name="Reddit_Combined")
+    )
     logger.info("Finished calculating sentiment scores.")
     return df_reddit
 
-def calculate_future_returns(df_merged: pd.DataFrame, price_df_full: pd.DataFrame) -> pd.DataFrame:
+def calculate_future_returns(df_merged_with_prices: pd.DataFrame) -> pd.DataFrame:
     logger.info("Calculating future returns...")
-    df_result = df_merged.copy()
+    # ודא שהעמודה 'Date' היא מסוג datetime לפני המיון
+    df_merged_with_prices['Date'] = pd.to_datetime(df_merged_with_prices['Date'])
+    df_calc = df_merged_with_prices.sort_values(by=['Ticker', 'Date']).copy()
 
-    for days_ahead in FUTURE_RETURN_DAYS:
-        logger.info(f"  Calculating for T+{days_ahead} days...")
-        # עמודות חדשות לכל טווח זמן
-        future_open_col = f'Future_Open_{days_ahead}D'
-        future_close_col = f'Future_Close_{days_ahead}D'
-        future_high_col = f'Future_High_{days_ahead}D'
-        future_low_col = f'Future_Low_{days_ahead}D'
-        return_vs_next_open_col = f'Return_vs_NextOpen_{days_ahead}D_Pct' # תשואה מקנייה בפתיחה של T+1 למכירה בסגירה של T+N
+    for days in FUTURE_RETURN_DAYS:
+        logger.info(f"  Calculating for T+{days} business days...")
         
-        df_result[future_open_col] = pd.NA
-        df_result[future_close_col] = pd.NA
-        df_result[future_high_col] = pd.NA
-        df_result[future_low_col] = pd.NA
-        df_result[return_vs_next_open_col] = pd.NA
+        # פתיחה של יום המסחר הבא (T+1 Open) - ישמש כנקודת כניסה
+        df_calc[f'Entry_Open_T+1B'] = df_calc.groupby('Ticker')['Open'].shift(-1) # BDay(1)
+        
+        # מחיר הסגירה N ימי עסקים *אחרי יום הכניסה* (T+1+N)
+        # ה-shift צריך להיות שלילי כדי להסתכל קדימה
+        # shift(-(days)) ייתן את הנתון מ-N ימי עסקים קדימה מהשורה הנוכחית (T+N).
+        # אנחנו רוצים את הנתון מ-N ימי עסקים אחרי יום הכניסה (T+1), כלומר (N+1) מהיום הנוכחי T.
+        df_calc[f'Future_Close_{days}B_after_Entry'] = df_calc.groupby('Ticker')['Close'].shift(-(days + 1))
+        df_calc[f'Future_High_{days}B_after_Entry'] = df_calc.groupby('Ticker')['High'].shift(-(days + 1))
+        df_calc[f'Future_Low_{days}B_after_Entry'] = df_calc.groupby('Ticker')['Low'].shift(-(days + 1))
 
-        # כדי למצוא מחירים עתידיים, נשתמש ב-shift על נתוני המחירים המקוריים הממוינים
-        # ודא ש-price_df_full ממוין לפי טיקר ואז תאריך
-        price_df_full_sorted = price_df_full.sort_values(by=['Ticker', 'Date'])
-
-        # מחיר הפתיחה של יום המסחר הבא (T+1 Open)
-        # נשתמש ב-groupby().shift(-1) כדי לקבל את הערך של השורה הבאה *בתוך כל קבוצת טיקר*
-        next_day_open_map = price_df_full_sorted.groupby('Ticker')['Open'].shift(-1)
+        entry_price_col = f'Entry_Open_T+1B'
+        exit_price_col = f'Future_Close_{days}B_after_Entry'
+        return_col = f'Return_{days}B_vs_T+1Open_Pct'
         
-        # מחירי סגירה, גבוה, נמוך עתידיים (T+N Close/High/Low)
-        # shift(-(days_ahead)) יקבל את הערך N שורות קדימה (בתוך כל קבוצת טיקר)
-        future_close_map = price_df_full_sorted.groupby('Ticker')['Close'].shift(-(days_ahead))
-        future_high_map = price_df_full_sorted.groupby('Ticker')['High'].shift(-(days_ahead))
-        future_low_map = price_df_full_sorted.groupby('Ticker')['Low'].shift(-(days_ahead))
-
-        # מיפוי הערכים ל-df_result
-        # ניישר את האינדקסים כדי שהמיפוי יעבוד על סמך האינדקס המקורי של price_df_full_sorted
-        # זה קצת מורכב בגלל ש-df_result הוא תת-קבוצה (אחרי מיזוג עם נתוני סנטימנט)
-        # דרך פשוטה יותר היא למזג את המחירים העתידיים חזרה
+        valid_prices = df_calc[entry_price_col].notna() & df_calc[exit_price_col].notna() & (df_calc[entry_price_col] != 0)
         
-        # יצירת עמודות תאריך עתידי למיזוג
-        df_result_temp = df_result[['Ticker', 'Date']].copy()
-        # התאריך לקנייה הוא יום העסקים הבא
-        df_result_temp[f'Trade_Entry_Date_{days_ahead}D'] = df_result_temp['Date'] + BDay(1)
-        # התאריך למכירה/בדיקה הוא N ימי עסקים אחרי תאריך הקנייה
-        df_result_temp[f'Future_Target_Date_{days_ahead}D'] = df_result_temp[f'Trade_Entry_Date_{days_ahead}D'] + BDay(days_ahead -1) # BDay(0) זה אותו יום
+        df_calc.loc[valid_prices, return_col] = \
+            ((df_calc.loc[valid_prices, exit_price_col] - df_calc.loc[valid_prices, entry_price_col]) / df_calc.loc[valid_prices, entry_price_col]) * 100
         
-        # מזג עם מחירי הפתיחה של יום הכניסה
-        price_df_full_sorted['Date'] = pd.to_datetime(price_df_full_sorted['Date']) # ודא פורמט
-        
-        # מחיר כניסה (Open למחרת)
-        df_result_temp = pd.merge(
-            df_result_temp,
-            price_df_full_sorted[['Ticker', 'Date', 'Open']],
-            left_on=['Ticker', f'Trade_Entry_Date_{days_ahead}D'],
-            right_on=['Ticker', 'Date'],
-            how='left',
-            suffixes=('', '_entry')
-        )
-        df_result_temp.rename(columns={'Open': future_open_col, 'Date_entry':f'Actual_Entry_Date_{days_ahead}D'}, inplace=True)
-        df_result_temp.drop(columns=['Date_entry'], inplace=True, errors='ignore')
-
-
-        # מחיר יעד (Close, High, Low ביום היעד)
-        df_result_temp = pd.merge(
-            df_result_temp,
-            price_df_full_sorted[['Ticker', 'Date', 'Close', 'High', 'Low']],
-            left_on=['Ticker', f'Future_Target_Date_{days_ahead}D'],
-            right_on=['Ticker', 'Date'],
-            how='left',
-            suffixes=('', '_target')
-        )
-        df_result_temp.rename(columns={
-            'Close': future_close_col, 
-            'High': future_high_col,
-            'Low': future_low_col,
-            'Date_target': f'Actual_Target_Date_{days_ahead}D'}, inplace=True)
-        df_result_temp.drop(columns=['Date_target'], inplace=True, errors='ignore')
-        
-        # העתק את התוצאות חזרה ל-df_result המקורי
-        # נשתמש באינדקס המקורי של df_result כדי להבטיח שהשורות מתאימות
-        df_result = pd.merge(df_result, 
-                             df_result_temp[['Ticker', 'Date', future_open_col, future_close_col, future_high_col, future_low_col]],
-                             on=['Ticker', 'Date'],
-                             how='left')
-
-        # חישוב התשואה
-        # ודא שהעמודות הן מספריות ושאין ערכי NaN לפני החישוב
-        valid_prices = df_result[future_open_col].notna() & df_result[future_close_col].notna()
-        df_result.loc[valid_prices, return_vs_next_open_col] = \
-            ((df_result.loc[valid_prices, future_close_col] - df_result.loc[valid_prices, future_open_col]) / df_result.loc[valid_prices, future_open_col]) * 100
-        
-        # עיגול התשואה
-        df_result[return_vs_next_open_col] = df_result[return_vs_next_open_col].round(2)
+        df_calc[return_col] = df_calc[return_col].round(2)
 
     logger.info("Finished calculating future returns.")
-    return df_result
+    return df_calc
 
 if __name__ == "__main__":
     logger.info(f"--- Starting Script: Create Backtest Dataset ---")
 
-    # 1. טעינת נתונים
-    df_reddit = load_and_prepare_reddit_data(REDDIT_PROCESSED_DATA_CSV)
-    df_prices = load_and_prepare_price_data(HISTORICAL_PRICES_CSV)
+    prices_downloaded = download_file_from_google_drive(PRICES_FILE_ID, LOCAL_PRICES_CSV_PATH, "Historical Prices CSV")
+    reddit_data_downloaded = download_file_from_google_drive(REDDIT_FILE_ID, LOCAL_REDDIT_PROCESSED_CSV_PATH, "Processed Reddit Data CSV")
 
-    if df_reddit.empty or df_prices.empty:
-        logger.error("One or both input dataframes are empty. Aborting.")
+    if not (prices_downloaded and reddit_data_downloaded):
+        logger.critical("Failed to download one or both necessary data files. Aborting.")
         exit()
 
-    # 2. חישוב סנטימנט על נתוני Reddit
-    df_reddit_with_sentiment = calculate_sentiment_scores(df_reddit)
-    # שמור את עמודות המפתח למיזוג
-    df_reddit_to_merge = df_reddit_with_sentiment[['Date', 'Ticker', 'avg_daily_reddit_sentiment', 'num_relevant_posts_today', 'avg_score_today', 'avg_num_comments_today', 'combined_reddit_text_for_day']].copy()
+    df_reddit_processed = load_and_prepare_reddit_data(LOCAL_REDDIT_PROCESSED_CSV_PATH)
+    df_prices_historical = load_and_prepare_price_data(LOCAL_PRICES_CSV_PATH)
 
-    # 3. מיזוג נתוני סנטימנט עם נתוני מחירים
+    if df_reddit_processed.empty or df_prices_historical.empty:
+        logger.error("One or both input dataframes are empty after loading. Aborting.")
+        exit()
+
+    df_reddit_with_sentiment = calculate_sentiment_scores(df_reddit_processed)
+    
+    df_reddit_to_merge = df_reddit_with_sentiment[[
+        'Date', 'Ticker', 'avg_daily_reddit_sentiment', 
+        'num_relevant_posts_today', 'avg_score_today', 
+        'avg_num_comments_today', 'combined_reddit_text_for_day'
+    ]].copy()
+
     logger.info("Merging Reddit sentiment data with price data...")
-    # ודא שפורמט התאריכים תואם לפני המיזוג
-    df_prices['Date'] = pd.to_datetime(df_prices['Date'])
+    df_prices_historical['Date'] = pd.to_datetime(df_prices_historical['Date'])
     df_reddit_to_merge['Date'] = pd.to_datetime(df_reddit_to_merge['Date'])
     
-    df_merged = pd.merge(df_prices, df_reddit_to_merge, on=['Date', 'Ticker'], how='left')
-    # המיזוג 'left' ישאיר את כל רשומות המחירים, ויוסיף NaN לסנטימנט אם אין נתוני רדיט לאותו יום/מניה
-    # אפשר לשקול 'inner' אם רוצים רק ימים שיש להם גם מחיר וגם סנטימנט
-    logger.info(f"Merged DataFrame shape: {df_merged.shape}. Contains data for days with price info.")
-    logger.info(f"Number of rows with Reddit sentiment after merge: {df_merged['avg_daily_reddit_sentiment'].notna().sum()}")
+    # שימוש ב-merge 'inner' כדי לשמור רק ימים שיש להם נתונים משני המקורות
+    df_merged = pd.merge(df_prices_historical, df_reddit_to_merge, on=['Date', 'Ticker'], how='inner')
+    
+    if df_merged.empty:
+        logger.error("DataFrame is empty after merging price and sentiment data. Check date ranges and ticker consistency. Aborting.")
+        exit()
+        
+    logger.info(f"Merged DataFrame shape: {df_merged.shape}. Contains data for days with both price and Reddit sentiment info.")
+    logger.info(f"Number of unique Tickers in merged data: {df_merged['Ticker'].nunique()}")
+    logger.info(f"Date range in merged data: {df_merged['Date'].min().strftime('%Y-%m-%d')} to {df_merged['Date'].max().strftime('%Y-%m-%d')}")
 
-    # 4. חישוב תשואות עתידיות
-    # df_prices המקורי משמש כאן כמקור לכלל המחירים ההיסטוריים לחישוב ה-shift
-    df_final = calculate_future_returns(df_merged, df_prices) 
+    df_final = calculate_future_returns(df_merged) 
 
-    # 5. שמירת ה-Dataset הסופי
     if not df_final.empty:
         try:
-            df_final.to_csv(FINAL_BACKTEST_DATASET_CSV, index=False, encoding='utf-8-sig', date_format='%Y-%m-%dT%H:%M:%S.%f') # שמירה בפורמט ISO מלא
+            # בחר את העמודות הסופיות שברצונך לשמור, בסדר הרצוי
+            final_columns_to_keep = [
+                'Date', 'Ticker', 
+                'Open', 'High', 'Low', 'Close', 'Volume', 'Adj Close', # מחירים מקוריים של יום T
+                'avg_daily_reddit_sentiment', 'num_relevant_posts_today', 
+                'avg_score_today', 'avg_num_comments_today', 'combined_reddit_text_for_day' # נתוני רדיט
+            ]
+            # הוסף את עמודות התשואה העתידית שנוצרו
+            for days in FUTURE_RETURN_DAYS:
+                final_columns_to_keep.append(f'Entry_Open_T+1B')
+                final_columns_to_keep.append(f'Future_Close_{days}B_after_Entry')
+                final_columns_to_keep.append(f'Future_High_{days}B_after_Entry')
+                final_columns_to_keep.append(f'Future_Low_{days}B_after_Entry')
+                final_columns_to_keep.append(f'Return_{days}B_vs_T+1Open_Pct')
+            
+            # השאר רק את העמודות האלה, וודא שהן קיימות
+            existing_final_columns = [col for col in final_columns_to_keep if col in df_final.columns]
+            df_to_save = df_final[existing_final_columns]
+
+            df_to_save.to_csv(FINAL_BACKTEST_DATASET_CSV, index=False, encoding='utf-8-sig', date_format='%Y-%m-%dT%H:%M:%S.%f')
             logger.info(f"Final backtesting dataset saved to: {FINAL_BACKTEST_DATASET_CSV}")
-            logger.info(f"Final DataFrame shape: {df_final.shape}")
-            logger.debug(f"Sample of final DataFrame head:\n{df_final.head().to_string()}")
+            logger.info(f"Final DataFrame shape: {df_to_save.shape}")
+            logger.debug(f"Sample of final DataFrame head:\n{df_to_save.head().to_string()}")
 
             if EMAIL_SENDER_AVAILABLE and os.path.exists(FINAL_BACKTEST_DATASET_CSV):
                 email_subject = f"Sentibot - Final Backtesting Dataset Ready ({datetime.now().strftime('%Y-%m-%d')})"
                 email_body = (
                     f"The final dataset for backtesting has been generated.\n\n"
-                    f"Source Reddit data file: {REDDIT_PROCESSED_DATA_CSV}\n"
-                    f"Source Price data file: {HISTORICAL_PRICES_CSV}\n"
+                    f"Source Reddit data file (after download): {LOCAL_REDDIT_PROCESSED_CSV_PATH}\n"
+                    f"Source Price data file (after download): {LOCAL_PRICES_CSV_PATH}\n"
                     f"Output file: {FINAL_BACKTEST_DATASET_CSV}\n\n"
-                    f"Total rows in final dataset: {len(df_final)}\n"
-                    f"Unique tickers in final dataset: {df_final['Ticker'].nunique()}\n"
-                    f"Date range in final dataset: {df_final['Date'].min().strftime('%Y-%m-%d')} to {df_final['Date'].max().strftime('%Y-%m-%d')}\n\n"
+                    f"Total rows in final dataset: {len(df_to_save)}\n"
+                    f"Unique tickers in final dataset: {df_to_save['Ticker'].nunique()}\n"
+                    f"Date range in final dataset: {df_to_save['Date'].min().strftime('%Y-%m-%d')} to {df_to_save['Date'].max().strftime('%Y-%m-%d')}\n\n"
                     f"Sentibot"
                 )
                 email_sent = send_email(
@@ -254,9 +246,17 @@ if __name__ == "__main__":
                     logger.info(f"Email with final backtesting dataset CSV sent successfully.")
                 else:
                     logger.error(f"Failed to send email with final backtesting dataset CSV.")
+            
+            if os.path.exists(LOCAL_PRICES_CSV_PATH):
+                logger.info(f"Deleting temporary downloaded prices file: {LOCAL_PRICES_CSV_PATH}")
+                os.remove(LOCAL_PRICES_CSV_PATH)
+            if os.path.exists(LOCAL_REDDIT_PROCESSED_CSV_PATH):
+                logger.info(f"Deleting temporary downloaded Reddit data file: {LOCAL_REDDIT_PROCESSED_CSV_PATH}")
+                os.remove(LOCAL_REDDIT_PROCESSED_CSV_PATH)
+
         except Exception as e_save_final:
             logger.error(f"Error saving final dataset or sending email: {e_save_final}", exc_info=True)
     else:
-        logger.warning("Final dataset is empty. No output file created.")
+        logger.warning("Final dataset is empty after all processing. No output file created.")
 
     logger.info(f"--- Create Backtest Dataset Script Finished ---")
