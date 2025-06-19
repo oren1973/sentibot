@@ -4,14 +4,14 @@ import os
 import pandas as pd
 from datetime import datetime, timezone
 import logging
-import time # הוספתי למקרה שנרצה להוסיף השהיות
+import time 
 
 # --- הגדרות פיילוט ---
-TEST_SYMBOL_FOR_REDDIT = "GME"        # שנה לסמל הרצוי
-TEST_SUBREDDIT = "wallstreetbets"     # שנה לסאברדיט הרצוי
-SEARCH_LIMIT_PER_SUB = 30             # כמה פוסטים לנסות לשלוף לכל היותר
-SEARCH_TIME_FILTER = "year"           # 'all', 'year', 'month', 'week', 'day', 'hour'
-OUTPUT_CSV_FILENAME = f"reddit_historical_pilot_{TEST_SYMBOL_FOR_REDDIT}_{TEST_SUBREDDIT}_{SEARCH_TIME_FILTER}.csv"
+TEST_SYMBOL_FOR_REDDIT = "GME"        # סמל לבדיקה
+TEST_SUBREDDIT = "wallstreetbets"     # סאברדיט לבדיקה
+SEARCH_LIMIT_PER_SUB = 30             # מגבלה נמוכה לבדיקה ראשונית של time_filter='all'
+SEARCH_TIME_FILTER = "all"            # <<<--- השינוי כאן!
+OUTPUT_CSV_FILENAME = f"reddit_historical_pilot_{TEST_SYMBOL_FOR_REDDIT}_{TEST_SUBREDDIT}_{SEARCH_TIME_FILTER}_limit{SEARCH_LIMIT_PER_SUB}.csv"
 
 # --- ניסיון לייבא פונקציות עזר ---
 EMAIL_SENDER_AVAILABLE = False
@@ -19,7 +19,6 @@ try:
     from email_sender import send_email 
     from settings import setup_logger 
     EMAIL_SENDER_AVAILABLE = True
-    # שימוש בלוגר מההגדרות, עם רמת DEBUG לפיילוט
     logger = setup_logger("RedditHistoricalPilot", level=logging.DEBUG) 
 except ImportError:
     logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
@@ -29,7 +28,7 @@ except ImportError:
 # -- קריאת פרטי API של Reddit ממשתני סביבה --
 REDDIT_CLIENT_ID = os.getenv("REDDIT_CLIENT_ID")
 REDDIT_CLIENT_SECRET = os.getenv("REDDIT_CLIENT_SECRET")
-REDDIT_USER_AGENT = os.getenv("REDDIT_USER_AGENT", "SentibotPilot/0.2 by YourRedditUsername") # עדכן את שם המשתמש שלך
+REDDIT_USER_AGENT = os.getenv("REDDIT_USER_AGENT", "SentibotPilot/0.2 by YourRedditUsername") 
 
 reddit_client_instance = None 
 if not REDDIT_CLIENT_ID or not REDDIT_CLIENT_SECRET:
@@ -43,7 +42,7 @@ else:
             client_id=REDDIT_CLIENT_ID,
             client_secret=REDDIT_CLIENT_SECRET,
             user_agent=REDDIT_USER_AGENT,
-            read_only=True # חשוב לשים read_only=True אם לא מבצעים פעולות כתיבה
+            read_only=True 
         )
         logger.info("PRAW client initialized (read-only status: {}).".format(reddit_client_instance.read_only))
     except Exception as e:
@@ -54,27 +53,23 @@ def fetch_historical_reddit_posts(symbol: str,
                                  subreddit_name: str, 
                                  limit: int, 
                                  time_filter: str,
-                                 min_body_len: int = 10) -> list[dict]: # הוספתי אורך מינימלי לגוף הפוסט
+                                 min_body_len: int = 10) -> list[dict]:
     if reddit_client_instance is None:
         logger.error("Reddit client (PRAW) is not initialized. Cannot fetch posts.")
         return []
 
     collected_posts = []
-    # חיפוש מדויק של הסמל, או מילים קשורות אם רוצים
-    # אפשר לשקול חיפוש יותר מתוחכם, למשל עם OR: f'"{symbol}" OR "${symbol_fullname}"'
     search_query = f'"{symbol}"' 
     
     logger.info(f"Fetching Reddit posts for query: '{search_query}' in r/{subreddit_name} (Sort: top, Limit: {limit}, Time Filter: {time_filter})")
 
     try:
         subreddit = reddit_client_instance.subreddit(subreddit_name)
-        # 'top' יכול להיות טוב יותר מ-'new' או 'relevance' למציאת פוסטים משמעותיים מהעבר
         submissions = subreddit.search(query=search_query, sort='top', time_filter=time_filter, limit=limit)
         
         processed_count = 0
         for submission in submissions:
             processed_count += 1
-            # דלג על פוסטים נעוצים או למבוגרים בלבד
             if submission.stickied or submission.over_18:
                 logger.debug(f"  Skipping stickied/over_18 post ID {submission.id}")
                 continue
@@ -82,7 +77,6 @@ def fetch_historical_reddit_posts(symbol: str,
             post_title = submission.title.strip()
             post_body = submission.selftext.strip() if submission.selftext else ""
             
-            # נאסוף את הפוסט רק אם יש לו כותרת או גוף משמעותיים
             if not post_title and (not post_body or len(post_body) < min_body_len) :
                 logger.debug(f"  Skipping post ID {submission.id} due to empty title and short/empty body.")
                 continue
@@ -97,12 +91,12 @@ def fetch_historical_reddit_posts(symbol: str,
                 "subreddit": subreddit_name,
                 "post_id": post_id,
                 "title": post_title,
-                "body": post_body, # גוף הפוסט המלא
+                "body": post_body, 
                 "url": post_url,
                 "created_utc_iso": post_created_iso,
                 "score": submission.score,
                 "num_comments": submission.num_comments,
-                "flair": str(submission.link_flair_text) # להוסיף את הפלייר אם קיים
+                "flair": str(submission.link_flair_text) 
             })
             logger.debug(f"  Collected post ({len(collected_posts)}): '{post_title[:80]}...' (Date: {post_created_iso}, Score: {submission.score})")
         
@@ -117,6 +111,7 @@ def fetch_historical_reddit_posts(symbol: str,
 
 if __name__ == "__main__":
     logger.info(f"--- Starting Reddit Historical Scraper Pilot for symbol: {TEST_SYMBOL_FOR_REDDIT} in r/{TEST_SUBREDDIT} ---")
+    logger.info(f"Parameters: Limit={SEARCH_LIMIT_PER_SUB}, Time Filter='{SEARCH_TIME_FILTER}'")
     
     if reddit_client_instance: 
         posts = fetch_historical_reddit_posts(
@@ -132,14 +127,19 @@ if __name__ == "__main__":
             
             if not df.empty:
                 df['created_utc_iso'] = pd.to_datetime(df['created_utc_iso'])
-                df.sort_values(by='created_utc_iso', ascending=True, inplace=True)
+                df.sort_values(by='created_utc_iso', ascending=True, inplace=True) # מיין מהישן לחדש
                 
-                logger.info("\n--- Scraped Reddit Posts DataFrame (Oldest First - Sample) ---")
-                # הדפס דגימה קטנה ללוג
+                logger.info("\n--- Scraped Reddit Posts DataFrame (Oldest First - Sample of 5) ---")
                 print_df = df[['created_utc_iso', 'title', 'score', 'num_comments', 'flair']].copy()
-                print_df['title'] = print_df['title'].str.slice(0, 70) + '...' # קצר את הכותרת להדפסה
+                print_df['title'] = print_df['title'].str.slice(0, 70) + '...' 
                 logger.info(f"\n{print_df.head().to_string()}")
                 
+                # בדוק את טווח התאריכים שקיבלנו
+                if not df.empty:
+                    min_date = df['created_utc_iso'].min()
+                    max_date = df['created_utc_iso'].max()
+                    logger.info(f"Date range of collected posts: {min_date} to {max_date}")
+
                 try:
                     df.to_csv(OUTPUT_CSV_FILENAME, index=False, encoding='utf-8-sig')
                     logger.info(f"Scraped Reddit data saved to {OUTPUT_CSV_FILENAME}")
@@ -149,7 +149,8 @@ if __name__ == "__main__":
                         email_body = (
                             f"Reddit historical scraper pilot finished for symbol {TEST_SYMBOL_FOR_REDDIT} in r/{TEST_SUBREDDIT}.\n"
                             f"Time filter: {SEARCH_TIME_FILTER}, Search limit: {SEARCH_LIMIT_PER_SUB}.\n"
-                            f"Scraped {len(posts)} posts.\n\n"
+                            f"Scraped {len(posts)} posts.\n"
+                            f"Date range in data: {min_date.strftime('%Y-%m-%d') if not df.empty else 'N/A'} to {max_date.strftime('%Y-%m-%d') if not df.empty else 'N/A'}\n\n"
                             f"The data is attached as '{OUTPUT_CSV_FILENAME}'.\n\n"
                             f"Sentibot"
                         )
