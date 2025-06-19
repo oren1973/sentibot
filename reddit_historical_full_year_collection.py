@@ -6,7 +6,6 @@ import logging
 import time
 
 # --- הגדרות איסוף ---
-# רשימת הטיקרים מהמסמך (בלי הבעייתיים מהורדת המחירים)
 TICKERS_TO_SCRAPE = [
     "TSLA", "META", "NVDA", "AMD", "GME", "AMC", "PLTR", "COIN", "BB", "CVNA", 
     "SPCE", "LCID", "NIO", "XPEV", "RIVN", "MULN", "SOFI", "MARA", 
@@ -15,19 +14,14 @@ TICKERS_TO_SCRAPE = [
     "DNA", "SNDL"
 ]
 
-# סאברדיטים לחיפוש (אפשר לקחת מ-settings.py אם הוא זמין)
 SUBREDDITS_TO_SEARCH = ["wallstreetbets", "stocks", "StockMarket", "investing", "options"] 
-# אם רוצים לייבא מ-settings:
-# try:
-# from settings import REDDIT_SUBREDDITS
-#     SUBREDDITS_TO_SEARCH = REDDIT_SUBREDDITS
-# except ImportError:
-#     pass # השתמש ברשימה המקומית
 
-SEARCH_LIMIT_PER_SUBREDDIT_PER_TICKER = 50  # כמה פוסטים לנסות לשלוף לכל היותר לכל טיקר בכל סאברדיט
-SEARCH_TIME_FILTER = "year"                 # 'year' כדי לקבל פוסטים מהשנה האחרונה
-OUTPUT_CSV_FILENAME = f"reddit_historical_data_1year_{datetime.now().strftime('%Y%m%d')}.csv"
-MIN_POST_RELEVANCE_SCORE_FOR_BODY = 10 # ניקוד מינימלי לפוסט כדי שניטרח לשלוף את גופו (אם הוא ארוך)
+# הגדלנו את המגבלה, אבל נהיה זהירים עם קצב הבקשות
+SEARCH_LIMIT_PER_SUBREDDIT_PER_TICKER = 100 # ננסה לאסוף עד 100 פוסטים לכל שילוב
+SEARCH_TIME_FILTER = "year"                 
+OUTPUT_CSV_FILENAME = f"reddit_historical_data_1year_limit{SEARCH_LIMIT_PER_SUBREDDIT_PER_TICKER}_{datetime.now().strftime('%Y%m%d')}.csv"
+MIN_POST_RELEVANCE_SCORE_FOR_BODY = 10 
+REQUEST_DELAY_SECONDS = 2 # השהיה של 2 שניות בין כל קריאת API ל-Reddit (חשוב!)
 
 # --- ניסיון לייבא פונקציות עזר ---
 EMAIL_SENDER_AVAILABLE = False
@@ -35,7 +29,7 @@ try:
     from email_sender import send_email 
     from settings import setup_logger 
     EMAIL_SENDER_AVAILABLE = True
-    logger = setup_logger("RedditHistoricalFull", level=logging.INFO) # נתחיל עם INFO, אפשר לשנות ל-DEBUG אם צריך
+    logger = setup_logger("RedditHistoricalFull", level=logging.INFO)
 except ImportError:
     logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
     logger = logging.getLogger("RedditHistoricalFull_Fallback")
@@ -44,7 +38,7 @@ except ImportError:
 # -- קריאת פרטי API של Reddit ממשתני סביבה --
 REDDIT_CLIENT_ID = os.getenv("REDDIT_CLIENT_ID")
 REDDIT_CLIENT_SECRET = os.getenv("REDDIT_CLIENT_SECRET")
-REDDIT_USER_AGENT = os.getenv("REDDIT_USER_AGENT", "SentibotDataCollection/0.3 by YourRedditUsername") 
+REDDIT_USER_AGENT = os.getenv("REDDIT_USER_AGENT", "SentibotDataCollection/0.4 by YourRedditUsername") # עדכנתי גרסה לדוגמה
 
 reddit_client_instance = None 
 if not REDDIT_CLIENT_ID or not REDDIT_CLIENT_SECRET:
@@ -65,36 +59,40 @@ else:
         logger.critical(f"Failed to initialize PRAW Reddit client: {e}", exc_info=True)
         reddit_client_instance = None
 
-def fetch_posts_for_ticker_and_subreddit(symbol: str, subreddit_name: str, limit: int, time_filter: str) -> list[dict]:
+def fetch_posts_for_ticker_and_subreddit(symbol: str, 
+                                 subreddit_name: str, 
+                                 limit: int, 
+                                 time_filter: str,
+                                 min_body_len: int = 10) -> list[dict]:
     if reddit_client_instance is None:
         return []
 
     collected_data = []
-    search_query = f'"{symbol}"' # חיפוש הסמל במרכאות
+    search_query = f'"{symbol}"' 
     
     logger.info(f"  Fetching for '{symbol}' in r/{subreddit_name} (Query: '{search_query}', Limit: {limit}, Time: {time_filter})")
 
     try:
         subreddit = reddit_client_instance.subreddit(subreddit_name)
-        # נשתמש ב-sort='relevance' כדי לנסות לקבל תוצאות יותר רלוונטיות לשאילתה,
-        # למרות שזה עשוי להיות פחות טוב לכיסוי היסטורי מאשר 'top' או 'new'.
-        # אפשר להתנסות עם sort='top' או sort='new' גם.
-        submissions = subreddit.search(query=search_query, sort='relevance', time_filter=time_filter, limit=limit)
+        # נשאר עם sort='relevance' כדי לנסות לקבל תוצאות יותר ממוקדות לשאילתה
+        submissions = subreddit.search(query=search_query, sort='relevance', time_filter=time_filter, limit=limit, syntax='lucene') # lucene יכול לשפר חיפוש עם מרכאות
         
         processed_submissions = 0
         for submission in submissions:
             processed_submissions += 1
             if submission.stickied or submission.over_18:
+                logger.debug(f"    Skipping stickied/over_18 post ID {submission.id}")
                 continue
 
             post_title = submission.title.strip()
-            
-            # נשלוף גוף הפוסט רק אם יש כותרת או שהניקוד גבוה יחסית (כדי לחסוך בקשות אם הגוף ארוך)
             post_body = ""
-            if post_title or submission.score > MIN_POST_RELEVANCE_SCORE_FOR_BODY:
-                 post_body = submission.selftext.strip() if submission.selftext else ""
+            # נשלוף גוף רק אם הכותרת רלוונטית או הניקוד גבוה, כדי לחסוך גישות אם לא צריך
+            # הפעם נשלוף תמיד כי אנחנו רוצים את המידע לניתוח
+            if submission.selftext:
+                 post_body = submission.selftext.strip()
             
-            if not post_title and not post_body: # דלג אם אין כותרת ואין גוף
+            if not post_title and (not post_body or len(post_body) < min_body_len) :
+                logger.debug(f"    Skipping post ID {submission.id} due to empty title and short/empty body.")
                 continue
 
             created_iso = datetime.fromtimestamp(submission.created_utc, tz=timezone.utc).isoformat()
@@ -109,11 +107,15 @@ def fetch_posts_for_ticker_and_subreddit(symbol: str, subreddit_name: str, limit
                 "url": submission.url,
                 "score": submission.score,
                 "num_comments": submission.num_comments,
-                "flair": str(submission.link_flair_text)
+                "flair": str(submission.link_flair_text) if submission.link_flair_text else None # טיפול במקרה שאין פלייר
             })
-        logger.info(f"    r/{subreddit_name}: Processed {processed_submissions} PRAW submissions, collected {len(collected_data)} valid posts.")
+            # נרשום ללוג רק חלק מהפוסטים כדי לא להעמיס, או ברמת DEBUG
+            if len(collected_data) % 10 == 0 or processed_submissions <= 5: # כל 10 פוסטים או 5 הראשונים
+                 logger.debug(f"    Collected post ({len(collected_data)} of {processed_submissions} processed): '{post_title[:70]}...' (Date: {created_iso})")
+        
+        logger.info(f"    r/{subreddit_name}: Processed {processed_submissions} PRAW submissions, collected {len(collected_data)} valid posts for '{symbol}'.")
     except Exception as e:
-        logger.error(f"  Error fetching from r/{subreddit_name} for '{symbol}': {e}", exc_info=False) # exc_info=False כדי לא להעמיס על הלוג
+        logger.error(f"  Error fetching from r/{subreddit_name} for '{symbol}': {e}", exc_info=False) 
     
     return collected_data
 
@@ -125,17 +127,18 @@ if __name__ == "__main__":
     logger.info(f"--- Starting Reddit Historical Data Collection for {len(TICKERS_TO_SCRAPE)} tickers ---")
     logger.info(f"Subreddits to search: {', '.join(SUBREDDITS_TO_SEARCH)}")
     logger.info(f"Time filter: '{SEARCH_TIME_FILTER}', Limit per ticker per subreddit: {SEARCH_LIMIT_PER_SUBREDDIT_PER_TICKER}")
+    logger.info(f"Delay between API calls: {REQUEST_DELAY_SECONDS} seconds.")
 
     all_collected_posts_list = []
-    total_posts_collected = 0
+    total_posts_collected_overall = 0
 
     for i, ticker in enumerate(TICKERS_TO_SCRAPE):
         logger.info(f"\nProcessing Ticker {i+1}/{len(TICKERS_TO_SCRAPE)}: {ticker}")
-        posts_for_this_ticker = []
+        posts_for_this_ticker_session = 0
         for subreddit_name in SUBREDDITS_TO_SEARCH:
-            # השהיה קטנה בין בקשות לסאברדיטים שונים (או לטיקרים שונים)
-            # כדי להיות נחמדים ל-API של Reddit
-            time.sleep(1) # שנייה אחת השהיה
+            # השהיה *לפני* כל קריאה ל-API
+            logger.debug(f"    Waiting {REQUEST_DELAY_SECONDS}s before querying r/{subreddit_name} for {ticker}...")
+            time.sleep(REQUEST_DELAY_SECONDS) 
             
             posts = fetch_posts_for_ticker_and_subreddit(
                 symbol=ticker,
@@ -144,17 +147,17 @@ if __name__ == "__main__":
                 time_filter=SEARCH_TIME_FILTER
             )
             if posts:
-                posts_for_this_ticker.extend(posts)
+                all_collected_posts_list.extend(posts)
+                posts_for_this_ticker_session += len(posts)
         
-        if posts_for_this_ticker:
-            all_collected_posts_list.extend(posts_for_this_ticker)
-            total_posts_collected += len(posts_for_this_ticker)
-            logger.info(f"  Collected {len(posts_for_this_ticker)} posts for {ticker} across all subreddits.")
+        if posts_for_this_ticker_session > 0:
+            total_posts_collected_overall += posts_for_this_ticker_session
+            logger.info(f"  Collected a total of {posts_for_this_ticker_session} posts for {ticker} across all searched subreddits this session.")
         else:
-            logger.info(f"  No posts collected for {ticker} across all subreddits.")
+            logger.info(f"  No posts collected for {ticker} across all searched subreddits this session.")
     
     logger.info(f"\n--- Finished Reddit Data Collection ---")
-    logger.info(f"Total posts collected for all tickers: {total_posts_collected}")
+    logger.info(f"Total posts collected overall for all tickers: {total_posts_collected_overall}")
 
     if all_collected_posts_list:
         final_df = pd.DataFrame(all_collected_posts_list)
@@ -162,6 +165,10 @@ if __name__ == "__main__":
             final_df['created_utc_iso'] = pd.to_datetime(final_df['created_utc_iso'])
             final_df.sort_values(by=['symbol_searched', 'created_utc_iso'], ascending=[True, True], inplace=True)
             
+            min_date_overall = final_df['created_utc_iso'].min()
+            max_date_overall = final_df['created_utc_iso'].max()
+            logger.info(f"Overall date range of collected posts: {min_date_overall.strftime('%Y-%m-%d')} to {max_date_overall.strftime('%Y-%m-%d')}")
+
             try:
                 final_df.to_csv(OUTPUT_CSV_FILENAME, index=False, encoding='utf-8-sig')
                 logger.info(f"All Reddit historical data saved to: {OUTPUT_CSV_FILENAME}")
@@ -174,8 +181,9 @@ if __name__ == "__main__":
                         f"Tickers processed: {len(TICKERS_TO_SCRAPE)}\n"
                         f"Subreddits searched: {', '.join(SUBREDDITS_TO_SEARCH)}\n"
                         f"Time filter: '{SEARCH_TIME_FILTER}'\n"
-                        f"Limit per ticker/sub: {SEARCH_LIMIT_PER_SUBREDDIT_PER_TICKER}\n\n"
-                        f"Total posts collected: {total_posts_collected}\n"
+                        f"Target limit per ticker/sub: {SEARCH_LIMIT_PER_SUBREDDIT_PER_TICKER}\n\n"
+                        f"Total posts collected: {total_posts_collected_overall}\n"
+                        f"Date range in data: {min_date_overall.strftime('%Y-%m-%d')} to {max_date_overall.strftime('%Y-%m-%d')}\n"
                         f"The data is attached as '{OUTPUT_CSV_FILENAME}'.\n\n"
                         f"Sentibot"
                     )
@@ -189,10 +197,6 @@ if __name__ == "__main__":
                         logger.info(f"Email with Reddit historical data CSV sent successfully.")
                     else:
                         logger.error(f"Failed to send email with Reddit historical data CSV.")
-                elif not EMAIL_SENDER_AVAILABLE:
-                    logger.warning("Email sending is not available for Reddit data.")
-                elif not os.path.exists(OUTPUT_CSV_FILENAME):
-                    logger.warning(f"Output file {OUTPUT_CSV_FILENAME} not found for email for Reddit data.")
             except Exception as e_save:
                 logger.error(f"Error saving Reddit data to CSV or sending email: {e_save}", exc_info=True)
         else:
