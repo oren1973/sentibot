@@ -2,29 +2,62 @@ import pandas as pd
 import numpy as np
 import os
 import logging
-import requests # עבור הורדה
-from datetime import datetime # עבור שם קובץ הפלט
+import requests 
+from datetime import datetime 
 
 # --- הגדרות ---
-EMAIL_SENDER_AVAILABLE = False # לא נשלח מייל מהסקריפט הזה, רק מדפיסים ללוג
-try:
-    from settings import setup_logger
-    logger = setup_logger("AnalyzeBacktestData", level=logging.INFO)
-except ImportError:
-    logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
-    logger = logging.getLogger("AnalyzeBacktestData_Fallback")
-    logger.warning("Could not import setup_logger from settings. Using basic logger.")
+EMAIL_SENDER_AVAILABLE = False
+ANALYSIS_LOG_FILENAME = f"analysis_output_{datetime.now().strftime('%Y%m%d_%H%M%S')}.txt" # שם קובץ הלוג של הניתוח
 
-# --- קישור לקובץ ה-Dataset ב-Google Drive ---
-BACKTEST_DATASET_FILE_ID = "1p8uIjfpOD2As9A_i08Q2fHUSkXwi2_D0" # ה-ID מהקישור שלך
+try:
+    from email_sender import send_email
+    from settings import setup_logger, REPORTS_OUTPUT_DIR # נייבא את REPORTS_OUTPUT_DIR
+    EMAIL_SENDER_AVAILABLE = True
+    
+    # הגדרת הלוגר הראשי שיכתוב גם לקונסול וגם לקובץ
+    logger = setup_logger("AnalyzeBacktestData", level=logging.INFO)
+    
+    # ודא שהתיקייה קיימת
+    if not os.path.exists(REPORTS_OUTPUT_DIR):
+        os.makedirs(REPORTS_OUTPUT_DIR, exist_ok=True)
+        
+    analysis_log_filepath = os.path.join(REPORTS_OUTPUT_DIR, ANALYSIS_LOG_FILENAME)
+    
+    # הוספת FileHandler ללוגר הראשי
+    file_handler = logging.FileHandler(analysis_log_filepath, mode='w', encoding='utf-8')
+    file_formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s') # פורמט פשוט יותר לקובץ
+    file_handler.setFormatter(file_formatter)
+    logger.addHandler(file_handler)
+    logger.info(f"Analysis output will also be saved to: {analysis_log_filepath}")
+
+except ImportError:
+    logging.basicConfig(level=logging.INFO, 
+                        format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+                        handlers=[logging.StreamHandler(), logging.FileHandler(ANALYSIS_LOG_FILENAME, mode='w', encoding='utf-8')])
+    logger = logging.getLogger("AnalyzeBacktestData_Fallback")
+    logger.warning("Could not import from email_sender or settings. Email functionality may be limited. Using basic file logger.")
+    analysis_log_filepath = ANALYSIS_LOG_FILENAME # שמור בתיקייה הנוכחית
+
+try:
+    from sentiment_analyzer import analyze_sentiment 
+    SENTIMENT_ANALYZER_AVAILABLE = True # נשאר מהקוד הקודם, למרות שלא בשימוש כאן
+except ImportError:
+    logger.error("Could not import 'analyze_sentiment'. This script doesn't use it directly but indicates a potential issue.")
+
+
+# --- קישורים לקבצים ב-Google Drive (מעודכנים לפי מה ששלחת) ---
+BACKTEST_DATASET_FILE_ID = "1p8uIjfpOD2As9A_i08Q2fHUSkXwi2_D0" 
 BACKTEST_DATASET_GOOGLE_DRIVE_URL = f"https://drive.google.com/uc?export=download&id={BACKTEST_DATASET_FILE_ID}"
-LOCAL_BACKTEST_CSV_PATH = "downloaded_backtesting_dataset.csv" # שם הקובץ כפי שיישמר זמנית בענן
+LOCAL_BACKTEST_CSV_PATH = "downloaded_backtesting_dataset.csv" 
+
+FUTURE_RETURN_DAYS = [1, 2, 3, 5, 10] 
 
 def download_file_from_google_drive(file_id: str, destination: str, file_description: str):
+    # ... (הפונקציה נשארת זהה לקודם) ...
     logger.info(f"Attempting to download {file_description} from Google Drive (ID: {file_id}) to {destination}...")
     url = f"https://drive.google.com/uc?export=download&id={file_id}"
     try:
-        response = requests.get(url, stream=True, timeout=180) # Timeout ארוך יותר, 3 דקות
+        response = requests.get(url, stream=True, timeout=180) 
         response.raise_for_status()
         with open(destination, 'wb') as f:
             for chunk in response.iter_content(chunk_size=81920): 
@@ -40,6 +73,7 @@ def download_file_from_google_drive(file_id: str, destination: str, file_descrip
         return False
 
 def run_analysis():
+    # הודעת הפתיחה הזו תיכתב גם לקובץ הלוג של הניתוח
     logger.info(f"--- Starting Analysis of Backtest Dataset ---")
 
     if not download_file_from_google_drive(BACKTEST_DATASET_FILE_ID, LOCAL_BACKTEST_CSV_PATH, "Final Backtest Dataset"):
@@ -52,9 +86,8 @@ def run_analysis():
 
     try:
         df_backtest = pd.read_csv(LOCAL_BACKTEST_CSV_PATH)
-        # חשוב לוודא שהמרת התאריך מתבצעת נכון, בהתאם לפורמט שבו הוא נשמר
         df_backtest['Date'] = pd.to_datetime(df_backtest['Date'], errors='coerce') 
-        df_backtest.dropna(subset=['Date'], inplace=True) # הסר שורות עם תאריך לא תקין
+        df_backtest.dropna(subset=['Date'], inplace=True)
         logger.info(f"Successfully loaded dataset with {len(df_backtest)} rows from {LOCAL_BACKTEST_CSV_PATH}.")
     except Exception as e:
         logger.error(f"Error loading dataset {LOCAL_BACKTEST_CSV_PATH}: {e}", exc_info=True)
@@ -68,8 +101,8 @@ def run_analysis():
     logger.info("\n--- Correlation Matrix (Sentiment vs Future Returns) ---")
     cols_for_corr = ['avg_daily_reddit_sentiment']
     return_cols_to_check = []
-    for days in [1, 2, 3, 5, 10]:
-        col = f'Return_{days}B_vs_T+1Open_Pct' # שם העמודה כפי שהוא נוצר בסקריפט הקודם
+    for days in FUTURE_RETURN_DAYS: # השתמש ב-FUTURE_RETURN_DAYS שהוגדר למעלה
+        col = f'Return_{days}B_vs_T+1Open_Pct' 
         if col in df_backtest.columns:
             cols_for_corr.append(col)
             return_cols_to_check.append(col)
@@ -77,9 +110,8 @@ def run_analysis():
             logger.warning(f"Return column {col} not found in dataset.")
     
     if 'avg_daily_reddit_sentiment' in df_backtest.columns and len(return_cols_to_check) > 0:
-        # הסר שורות עם NaN באחת מהעמודות הרלוונטיות לקורלציה
         df_corr = df_backtest[cols_for_corr].dropna()
-        if not df_corr.empty and len(df_corr) > 1: # צריך לפחות 2 דגימות לקורלציה
+        if not df_corr.empty and len(df_corr) > 1: 
             correlation_matrix = df_corr.corr()
             logger.info(f"\nCorrelation Matrix (based on {len(df_corr)} rows):\n{correlation_matrix.to_string()}")
         else:
@@ -96,11 +128,10 @@ def run_analysis():
     if 'avg_daily_reddit_sentiment' in df_backtest.columns:
         df_backtest['sentiment_group'] = pd.cut(df_backtest['avg_daily_reddit_sentiment'], bins=bins, labels=labels, right=False)
 
-        for days_horizon in [1, 2, 3, 5, 10]:
+        for days_horizon in FUTURE_RETURN_DAYS: # השתמש ב-FUTURE_RETURN_DAYS
             return_col = f'Return_{days_horizon}B_vs_T+1Open_Pct'
             if return_col in df_backtest.columns:
                 logger.info(f"\n--- Analysis for {days_horizon}-Day Future Return by Sentiment Group ---")
-                # הצג רק אם יש ערכים שאינם NaN בעמודת התשואה
                 if df_backtest[return_col].notna().any(): 
                     summary = df_backtest.groupby('sentiment_group')[return_col].agg(['mean', 'std', 'count', 'median'])
                     logger.info(f"\n{summary.to_string()}")
@@ -114,7 +145,7 @@ def run_analysis():
     # --- ג. השפעת מספר הפוסטים (num_relevant_posts_today) ---
     if 'num_relevant_posts_today' in df_backtest.columns and 'avg_daily_reddit_sentiment' in df_backtest.columns and len(return_cols_to_check) > 0:
         logger.info("\n--- Correlation: Sentiment vs Returns (High Num Posts > 5) ---")
-        df_high_posts = df_backtest[df_backtest['num_relevant_posts_today'] > 5].copy() # השתמש ב-copy למנוע SettingWithCopyWarning
+        df_high_posts = df_backtest[df_backtest['num_relevant_posts_today'] > 5].copy() 
         
         if not df_high_posts.empty:
             df_high_posts_corr = df_high_posts[cols_for_corr].dropna()
@@ -129,7 +160,7 @@ def run_analysis():
         logger.warning("Could not perform correlation analysis for high number of posts (missing columns or no data).")
 
     # --- ד. ניתוח פרטני למניות ספציפיות (דוגמה ל-TSLA ו-GME) ---
-    for ticker_to_analyze in ["TSLA", "GME"]:
+    for ticker_to_analyze in ["TSLA", "GME", "AAPL", "NVDA", "AMC"]: # הרחבתי קצת את הרשימה
         logger.info(f"\n--- Correlation Matrix for {ticker_to_analyze} ---")
         if 'Ticker' in df_backtest.columns and 'avg_daily_reddit_sentiment' in df_backtest.columns and len(return_cols_to_check) > 0:
             ticker_data = df_backtest[df_backtest['Ticker'] == ticker_to_analyze].copy()
@@ -145,15 +176,36 @@ def run_analysis():
         else:
              logger.warning(f"Could not perform correlation analysis for {ticker_to_analyze} (missing columns or no data).")
     
-    # נקה את הקובץ שהורדנו אם רוצים
+    # --- שליחת קובץ הלוג של הניתוח במייל ---
+    logger.info(f"\n--- Analysis Script Finished. Preparing to email analysis log: {analysis_log_filepath} ---")
+    if EMAIL_SENDER_AVAILABLE and os.path.exists(analysis_log_filepath):
+        email_subject = f"Sentibot - Backtest Dataset Analysis Results ({datetime.now().strftime('%Y-%m-%d')})"
+        email_body = (
+            f"The analysis of the backtesting dataset is complete.\n"
+            f"The full analysis output log is attached.\n\n"
+            f"Input dataset (downloaded to): {LOCAL_BACKTEST_CSV_PATH}\n"
+            f"Number of rows in input dataset: {len(df_backtest) if 'df_backtest' in locals() else 'N/A'}\n\n"
+            f"Sentibot"
+        )
+        email_sent = send_email(
+            subject=email_subject,
+            body=email_body,
+            attachment_paths=[analysis_log_filepath] # שלח את קובץ הלוג של הניתוח
+        )
+        if email_sent:
+            logger.info(f"Email with analysis log sent successfully.")
+        else:
+            logger.error(f"Failed to send email with analysis log.")
+    elif not os.path.exists(analysis_log_filepath):
+        logger.error(f"Analysis log file {analysis_log_filepath} not found for email attachment.")
+    
+    # נקה את הקובץ שהורדנו מ-Google Drive
     if os.path.exists(LOCAL_BACKTEST_CSV_PATH):
         logger.info(f"Deleting temporary downloaded dataset file: {LOCAL_BACKTEST_CSV_PATH}")
         try:
             os.remove(LOCAL_BACKTEST_CSV_PATH)
         except Exception as e_del:
             logger.warning(f"Could not delete temporary file {LOCAL_BACKTEST_CSV_PATH}: {e_del}")
-
-    logger.info("\n--- Analysis Script Finished ---")
 
 if __name__ == "__main__":
     run_analysis()
